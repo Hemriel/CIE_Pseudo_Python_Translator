@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+.vscode/
+
+# Generated compiler outputs
+outputs/
+
+# Generated artifacts from compiler runs
+*_tokens.txt
+*_ast.txt
+*_symbol_table*.md
+
+# Optional: ignore generated Python output if emitted elsewhere
+*.pyc

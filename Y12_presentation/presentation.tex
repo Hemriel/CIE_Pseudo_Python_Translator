@@ -1,0 +1,63 @@
+\documentclass[11pt]{beamer}
+\usetheme{Copenhagen}
+\usefonttheme{serif}
+
+\usepackage[utf8]{inputenc}
+\usepackage[english]{babel}
+\usepackage[T1]{fontenc}
+
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{amssymb}
+\usepackage{graphicx}
+\usepackage{enumitem}
+\usepackage{multicol}
+
+\setbeamertemplate{caption}[numbered]
+
+\AtBeginSection[] {
+    \begin{frame}
+        \frametitle{Outline}
+        \tableofcontents[currentsection]
+    \end{frame}
+}
+% --- Customize the headline to show current section name only ---
+\setbeamertemplate{headline}{%
+  \leavevmode%
+  \hbox{%
+    \begin{beamercolorbox}[wd=\paperwidth,ht=2.5ex,dp=1.125ex,leftskip=1em,rightskip=1em]{section in head/foot}
+      \usebeamerfont{section in head/foot}%
+      \insertsectionhead
+    \end{beamercolorbox}%
+  }%
+}
+\setbeamertemplate{footline}{%
+  \leavevmode%
+  \hbox{%
+    \begin{beamercolorbox}[wd=.5\paperwidth,ht=2.25ex,dp=1ex,center]{author in head/foot}%
+      \usebeamerfont{author in head/foot} \insertshortauthor
+    \end{beamercolorbox}%
+    \begin{beamercolorbox}[wd=.5\paperwidth,ht=2.25ex,dp=1ex,center]{title in head/foot}%
+      \usebeamerfont{title in head/foot}\insertshorttitle \hfill \insertframenumber/\inserttotalframenumber
+    \end{beamercolorbox}
+  }
+}
+
+\author[Thomas Defranceschi]{}
+\title{Let's make a CPU}
+\setbeamertemplate{navigation symbols}{} 
+%\logo{}
+\institute[]{Made for IGCSE at Musashi International School Tokyo} 
+\date{} 
+%\subject{}
+
+\begin{document}
+
+\begin{frame}
+\titlepage
+\end{frame}
+
+
+
+
+\end{document}

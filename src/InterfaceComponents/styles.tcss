@@ -1,0 +1,53 @@
+
+.hidden {
+    display: none;
+}
+
+#file-input {
+    border: none;
+    height: 1;
+}
+
+.centered {
+    content-align: center middle;
+}
+
+.dynamic-panel {
+    width: 1fr;
+    border: round $accent;
+}
+
+#title-bar {
+    color: white;
+    width: 100%;
+    content-align: center middle;
+}
+
+.error {
+    color: $error;
+}
+
+.success {
+    color: $success;
+}
+
+#text {
+    border: none;
+    background: 0%;
+}
+
+DataTable > .datatable--fixed {
+    background: $surface; /* Match your table's normal background */
+    color: $text;        /* Match your table's normal text color */
+}
+
+/* Style the fixed column's even rows (zebra stripe color) */
+DataTable > .datatable--fixed-even {
+    background: $boost;
+}
+
+/* Ensure header cells in fixed columns also match */
+DataTable > .datatable--fixed-header {
+    background: $primary; /* Or whatever your header color is */
+    color: $text;
+}
