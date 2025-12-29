@@ -45,7 +45,7 @@ class CIEPseudocodeToPythonCompiler(App):
         Binding("ctrl+n", "complete_step", "Complete Step/next Step"),
         Binding("ctrl+s", "start_lexing", "Start Lexing"),
         Binding("t", "manual_tick", "Progress 1 Tick"),
-        Binding("ctrl+e", "load_example", "Load Example Code"),
+        Binding("ctrl+b", "restart_compiler", "Restart Compiler"),
     ]
 
     running = reactive(False)
@@ -391,42 +391,49 @@ class CIEPseudocodeToPythonCompiler(App):
             while not self.phase_completed and not self.phase_failed:
                 self.progress_tick()
 
-    def action_load_example(self):
-        """Load example pseudocode into the source editor."""
-        example_code_path = "examples/example.txt"
-        try:
-            with open(example_code_path, "r") as file:
-                code = file.read()
-                self._set_source_code_programmatically(code, program_name="example")
-                self.post_to_action_bar("Example code loaded successfully.", "success")
-        except FileNotFoundError:
-            self.post_to_action_bar("Example code file not found.", "error")
-        except Exception as e:
-            self.post_to_action_bar(f"Error loading example code: {e}", "error")
+    def action_restart_compiler(self):
+        """Restart the compiler to initial state."""
+        failed = self.phase_failed
+        self.set_phase(PHASES[0])  # Restart from first phase
+        self.pipeline.reset_all()
+        if not failed:
+            self.left_panel.source_editor.text = ""
+            self.file_name = ""
+            self._refresh_title_bar()
 
     def check_action(self, action: str, parameters: tuple[object, ...]) -> bool | None:
         """Check if an action may run."""
         if (
             action == "load_file"
             or action == "start_lexing"
-            or action == "load_example"
         ):
             return self.current_phase == "Source Code Input"
         elif action == "toggle_auto_progress":
             return (
                 self.current_phase != "Source Code Input"
                 and self.phase_completed == False
+                and self.current_phase != PHASES[-1].name
             )
         if action in ["increase_speed", "decrease_speed"]:
-            return self.current_phase != "Source Code Input" and self.running
+            return (
+                self.current_phase != "Source Code Input" 
+                and self.running
+                and self.current_phase != PHASES[-1].name
+            )
         elif action == "manual_tick":
             return (
                 self.current_phase != "Source Code Input"
                 and not self.running
                 and not self.phase_completed
+                and self.current_phase != PHASES[-1].name
             )
         elif action == "complete_step":
-            return self.current_phase != "Source Code Input"
+            return (
+                self.current_phase != "Source Code Input"
+                and self.current_phase != PHASES[-1].name
+            )
+        elif action == "restart_compiler":
+            return self.current_phase == PHASES[-1].name
         return True
 
     def entering_source_trimming(self):
@@ -488,20 +495,16 @@ class CIEPseudocodeToPythonCompiler(App):
             bool: True if tokenization is complete, False otherwise.
         """
         try:
-            try:
-                done, report = self.pipeline.tick_tokenization()
-                if done:
-                    return True  # Tokenization complete
-            except LexingError as ve:
-                self.post_to_action_bar(f"Error during tokenization: {ve}", "error")
-                self.running = False
-                return False  # Stop tokenization on error
+            done, report = self.pipeline.tick_tokenization()
+            if done:
+                return True  # Tokenization complete
             if report is None:
                 return False
             self.right_panel.token_table.apply_progress_report(token_report=report)
             self.left_panel.trimmed_display.apply_progress_report(token_report=report)
             self.post_to_action_bar(report.action_bar_message, "info")
             return False  # Tokenization not yet complete
+        
         except StopIteration:
             return True  # Tokenization complete
         except LexingError as le:
@@ -560,6 +563,7 @@ class CIEPseudocodeToPythonCompiler(App):
             self.running = False
             return
         self.left_panel.ast_tree.build_from_ast_root(self.ast_root)
+        self.right_panel.complete_symbol_table.clear()
         self.pipeline.ast_root = self.ast_root
         self.pipeline.begin_first_pass()
         self.symbol_table_complete = self.pipeline.symbol_table_complete
