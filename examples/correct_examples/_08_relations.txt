@@ -1,0 +1,22 @@
+// working example for relational (comparison) operators.
+
+DECLARE x, y : INTEGER
+DECLARE gt, lt, gte, lte, eq, neq : BOOLEAN
+
+x <- 10
+y <- 7
+
+gt <- x > y
+lt <- x < y
+gte <- x >= y
+lte <- x <= y
+eq <- x = y
+neq <- x <> y
+
+OUTPUT "x = ", x, " y = ", y
+OUTPUT "x > y  => ", gt
+OUTPUT "x < y  => ", lt
+OUTPUT "x >= y => ", gte
+OUTPUT "x <= y => ", lte
+OUTPUT "x = y  => ", eq
+OUTPUT "x <> y => ", neq

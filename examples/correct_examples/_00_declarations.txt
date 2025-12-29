@@ -1,0 +1,8 @@
+// working example of declarations (including multiple)
+
+DECLARE a : INTEGER
+DECLARE b1, b2 : REAL
+DECLARE c : CHAR
+DECLARE d1, d2 : STRING
+DECLARE e : BOOLEAN
+DECLARE f1, f2 : DATE

@@ -25,7 +25,7 @@ operators_map = {
     "GT": ">",
     "GTE": ">=",
     "INT": "int",
-    "AMPERSAND": "&",
+    "AMPERSAND": "+",
 }
 
 type_to_default_value = {
@@ -270,7 +270,7 @@ class Literal(Expression):
             return f'"{self.value}"'
         return self.value
     
-    def generate_code(self, indent = "") -> Generator[CodeGenerationReport, None, None]:
+    def generate_code(self, indent = "", with_type=False) -> Generator[CodeGenerationReport, None, None]:
         """Yield code-generation events for this literal.
 
         Args:
@@ -2243,7 +2243,10 @@ class Arguments(ASTNode):
                 report.looked_at_tree_node_id = self.unique_id
                 report.new_code = ", "
                 yield report
-            yield from arg.generate_code(with_type=with_type)
+            if isinstance(arg, Argument):
+                yield from arg.generate_code(with_type=with_type)
+            else:
+                yield from arg.generate_code()
 
     def __repr__(self):
         return f"ArgumentNode({self.arguments}, line {self.line})"
@@ -2531,7 +2534,7 @@ class OpenFileStatement(Statement):
         report = CodeGenerationReport()
         report.action_bar_message = "Finalizing code for open file statement..."
         report.looked_at_tree_node_id = self.unique_id
-        report.new_code = f", '{self.mode}')"
+        report.new_code = f", '{self.mode}')\n"
         yield report
 
     def __repr__(self):
@@ -2593,7 +2596,7 @@ class ReadFileStatement(Statement):
         report = CodeGenerationReport()
         report.action_bar_message = "Finalizing code for read file statement..."
         report.looked_at_tree_node_id = self.unique_id
-        report.new_code = f"].readline()"
+        report.new_code = f"].readline()\n"
         yield report
 
     def __repr__(self):
@@ -2707,7 +2710,7 @@ class WriteFileStatement(Statement):
         report = CodeGenerationReport()
         report.action_bar_message = "Finalizing code for write file statement..."
         report.looked_at_tree_node_id = self.unique_id
-        report.new_code = f"))"
+        report.new_code = f"))\n"
         yield report
 
     def __repr__(self):
@@ -2773,7 +2776,7 @@ class CloseFileStatement(Statement):
         report = CodeGenerationReport()
         report.action_bar_message = "Finished code for close file statement."
         report.looked_at_tree_node_id = self.unique_id
-        report.new_code = f")"
+        report.new_code = f")\n"
         yield report
 
     def __repr__(self):

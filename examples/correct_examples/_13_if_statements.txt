@@ -1,0 +1,57 @@
+// Working example for if statements (including nested)
+
+DECLARE x : INTEGER
+DECLARE y : INTEGER
+DECLARE isReady : BOOLEAN
+
+x <- 10
+y <- 5
+isReady <- TRUE
+
+// IF without ELSE
+IF x > y THEN
+    OUTPUT "x is greater than y"
+ENDIF
+
+// IF with ELSE
+IF x = y THEN
+    OUTPUT "x equals y"
+ELSE
+    OUTPUT "x does not equal y"
+ENDIF
+
+// IF condition using a BOOLEAN variable
+IF isReady THEN
+    OUTPUT "System is ready"
+ENDIF
+
+// Nested IF (IF inside THEN branch)
+IF x > 0 THEN
+    OUTPUT "x is positive"
+    IF x > 100 THEN
+        OUTPUT "x is greater than 100"
+    ELSE
+        OUTPUT "x is between 1 and 100"
+    ENDIF
+ELSE
+    OUTPUT "x is not positive"
+ENDIF
+
+// Nested IF (IF inside ELSE branch)
+IF y > 0 THEN
+    OUTPUT "y is positive"
+ELSE
+    OUTPUT "y is not positive"
+    IF y = 0 THEN
+        OUTPUT "y is exactly zero"
+    ELSE
+        OUTPUT "y is negative"
+    ENDIF
+ENDIF
+
+// More complex conditions
+IF (x > y) AND (x > 0) THEN
+    OUTPUT "x is positive and greater than y"
+ELSE
+    OUTPUT "x is not positive, or not greater than y"
+ENDIF

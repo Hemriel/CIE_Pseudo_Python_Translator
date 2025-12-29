@@ -1,0 +1,8 @@
+// working example of constant declarations
+
+CONSTANT a <- 6
+CONSTANT b <- 2.03
+CONSTANT c <- 'h'
+CONSTANT d <- "test"
+CONSTANT e <- TRUE
+CONSTANT f <- 22/02/2022

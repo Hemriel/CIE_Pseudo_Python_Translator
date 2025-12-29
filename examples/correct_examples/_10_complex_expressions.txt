@@ -1,0 +1,36 @@
+// Working example for complex expressions
+
+// Arithmetic precedence and parentheses
+DECLARE a, b, c : INTEGER
+a <- 7
+b <- 3
+OUTPUT "a = ", a, ", b = ", b
+
+c <- (a + b) * (a - b) + a ^ 2
+OUTPUT "c = (a + b) * (a - b) + a ^ 2 => ", c
+
+// Mixed arithmetic + comparison
+DECLARE x, y : REAL
+x <- 12.5
+y <- 4.0
+OUTPUT "x / y > 3.0 => ", (x / y > 3.0)
+OUTPUT "(x - y) <= 10.0 => ", ((x - y) <= 10.0)
+
+// Logical expressions with NOT/AND/OR (using comparisons)
+DECLARE p, q, r : BOOLEAN
+p <- (a MOD 2 = 1)
+q <- (b DIV 2 = 1)
+r <- (NOT p) OR (q AND (a + b > 5))
+OUTPUT "p = (a MOD 2 = 1) => ", p
+OUTPUT "q = (b DIV 2 = 1) => ", q
+OUTPUT "r = (NOT p) OR (q AND (a + b > 5)) => ", r
+
+// Combining string concatenation with computed values
+DECLARE n : INTEGER
+n <- (a + b) * 2 - (c DIV 10)
+OUTPUT "n = (a + b) * 2 - (c DIV 10) => ", n
+
+// A compound comparison built from smaller parts
+DECLARE ok : BOOLEAN
+ok <- (c >= 0) AND (n <> 0)
+OUTPUT "ok = (c >= 0) AND (n <> 0) => ", ok
