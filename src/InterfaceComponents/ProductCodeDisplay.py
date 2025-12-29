@@ -10,7 +10,7 @@ class ProductCodeEditor(TextArea):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.read_only = False
+        self.read_only = True
         self.language = "python"
         self.show_line_numbers = True
         

@@ -187,15 +187,13 @@ class CIEPseudocodeToPythonCompiler(App):
 
     def _refresh_title_bar(self) -> None:
         program_label = self.file_name if self.file_name else "(none)"
-        self.subtitle = f"{self._phase_subtitle_base} | Program: {program_label}"
+        self.title = f"CIE Pseudocode to Python Compiler | Program: {program_label}"
+        self.subtitle = f"{self._phase_subtitle_base}"
 
     def _set_source_code_programmatically(self, code: str, *, program_name: str | None = None) -> None:
         self._programmatic_source_set = True
-        try:
-            self.left_panel.source_editor.text = code
-        finally:
-            self._programmatic_source_set = False
-
+        self.left_panel.source_editor.text = code
+        
         if program_name is not None:
             self.file_name = program_name
         self._refresh_title_bar()

@@ -63,7 +63,7 @@ PHASES = [
     Phase(
         name="Semantic Analysis: first pass",
         step_number="3.1",
-        description="Complete the symbol table (variables, functions, types, and constants declared via the CONSTANT keyword).",
+        description="Complete the symbol table.",
         left_panel_type=DynamicPanelContentType.AST_TREE,
         left_panel_title="Abstract Syntax Tree (AST)",
         right_panel_type=DynamicPanelContentType.COMPLETE_SYMBOL_TABLE,
@@ -72,7 +72,7 @@ PHASES = [
     Phase(
         name="Semantic Analysis: second pass",
         step_number="3.2",
-        description="Checks for semantic errors in the AST (declarations before use; constants declared with CONSTANT can only be assigned once, and the assignment must be a literal).",
+        description="Checks for semantic errors in the AST.",
         left_panel_type=DynamicPanelContentType.AST_TREE,
         left_panel_title="Abstract Syntax Tree (AST)",
         right_panel_type=DynamicPanelContentType.COMPLETE_SYMBOL_TABLE,
