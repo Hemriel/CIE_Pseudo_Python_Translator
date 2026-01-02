@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Generator
+from dataclasses import dataclass
 
 from CompilerComponents.AST import *
 from CompilerComponents.ProgressReport import ParsingReport
@@ -32,6 +33,100 @@ class _ParserState:
         # Keep cursor sync via consumption reports, and only emit peek reports
         # when explicitly enabled.
         self.emit_peek_reports: bool = False
+
+
+@dataclass(frozen=True)
+class ParsedType:
+    """Result of parsing a type annotation.
+
+    Supports:
+    - Simple types: INTEGER, REAL, STRING, BOOLEAN, DATE, CHAR, or custom IDENTIFIER
+    - Array types: ARRAY[<low>:<high>] OF <type>
+                 ARRAY[<low>:<high>, <low>:<high>] OF <type>
+
+    Notes:
+    - For arrays, `element_type` is the underlying element type name.
+    - `type_name` is a canonical string used in AST nodes / symbol table entries.
+    """
+
+    type_name: str
+    element_type: str
+    is_array: bool
+    is_two_d: bool
+    bounds1: Bounds | None
+    bounds2: Bounds | None
+
+
+def parse_type(state: _ParserState) -> Generator[ParsingReport, None, ParsedType]:
+    """Parse a CIE type.
+
+    Grammar (subset):
+      <type> ::= <simple_type> | 'ARRAY' '[' <bounds> (',' <bounds>)? ']' 'OF' <simple_type>
+      <simple_type> ::= VARIABLE_TYPE | IDENTIFIER
+      <bounds> ::= <expression> ':' <expression>
+
+    Returns:
+      ParsedType describing the parsed type, including bounds for arrays.
+    """
+
+    next_token = yield from _peek_token(state)
+    if next_token is None:
+        raise ParsingError("EOF: Unexpected end of input while parsing type.")
+
+    # Array type
+    if next_token.value == "ARRAY":
+        yield from _advance_token(state, "Consume ARRAY")
+        yield from _expect_token(state, ["LBRACKET"])
+
+        bounds_group_id = yield from _visual_begin(state, "Bounds")
+        try:
+            lower1 = yield from parse_expression(state)
+            yield from _expect_token(state, ["COLON"])
+            upper1 = yield from parse_expression(state)
+            bounds1 = Bounds(lower1, upper1, lower1.line)
+
+            bounds2: Bounds | None = None
+            is_two_d = False
+            if (yield from _match_token(state, ["COMMA"])):
+                is_two_d = True
+                lower2 = yield from parse_expression(state)
+                yield from _expect_token(state, ["COLON"])
+                upper2 = yield from parse_expression(state)
+                bounds2 = Bounds(lower2, upper2, lower2.line)
+
+            yield from _expect_token(state, ["RBRACKET"])
+        finally:
+            yield from _visual_end(state, bounds_group_id)
+
+        yield from _expect_token(state, ["OF"])
+
+        base_type_token = yield from _expect_token(
+            state, [TokenType.VARIABLE_TYPE, TokenType.IDENTIFIER]
+        )
+        element_type = base_type_token.value
+
+        type_name = (
+            f"2D ARRAY[{element_type}]" if is_two_d else f"ARRAY[{element_type}]"
+        )
+        return ParsedType(
+            type_name=type_name,
+            element_type=element_type,
+            is_array=True,
+            is_two_d=is_two_d,
+            bounds1=bounds1,
+            bounds2=bounds2,
+        )
+
+    # Simple type
+    simple = yield from _expect_token(state, [TokenType.VARIABLE_TYPE, TokenType.IDENTIFIER])
+    return ParsedType(
+        type_name=simple.value,
+        element_type=simple.value,
+        is_array=False,
+        is_two_d=False,
+        bounds1=None,
+        bounds2=None,
+    )
 
 
 def _new_report(
@@ -301,7 +396,7 @@ def parse_primary(state: _ParserState):
             args = []
             if not (yield from _match_token(state, ["RPAREN"])):
                 while True:
-                    arg = yield from parse_expression_inner(state)
+                    arg = yield from parse_expression(state)
                     args.append(arg)
 
                     if (yield from _match_token(state, ["COMMA"])):
@@ -316,10 +411,10 @@ def parse_primary(state: _ParserState):
 
         # if next token is '[', it's an array access
         elif (yield from _match_token(state, ["LBRACKET"])):
-            index_expr = yield from parse_expression_inner(state)
+            index_expr = yield from parse_expression(state)
             comma = yield from _match_token(state, ["COMMA"])
             if comma:
-                index_expr2 = yield from parse_expression_inner(state)
+                index_expr2 = yield from parse_expression(state)
 
             yield from _expect_token(state, ["RBRACKET"])  # consume ']'
 
@@ -346,6 +441,7 @@ def parse_primary(state: _ParserState):
 
         # Otherwise, it's a variable
         return Variable(token.value, token.line_number)
+    
     # Literal values
     elif next_token.type in [
         TokenType.INT_LITERAL,
@@ -360,7 +456,7 @@ def parse_primary(state: _ParserState):
 
     # Parenthesized expression
     elif (yield from _match_token(state, ["LPAREN"])):
-        expr = yield from parse_expression_inner(state)
+        expr = yield from parse_expression(state)
         yield from _expect_token(state, ["RPAREN"])  # consume ')'
         return expr
 
@@ -421,10 +517,16 @@ def parse_multiplicative(state: _ParserState):
     <multiplicative> ::= <power> (('MULTIPLY' | 'DIVIDE' | 'MOD' | 'DIV') <power>)*
     """
     left = yield from parse_power(state)
+    next_token = yield from _peek_token(state)
+    if next_token and next_token.type != TokenType.OPERATOR:
+        return left
     operator = yield from _match_token(state, ["MULTIPLY", "DIVIDE", "MOD", "DIV"])
     while operator:
         right = yield from parse_power(state)
         left = BinaryExpression(left, operator.value, right, operator.line_number)
+        next_token = yield from _peek_token(state)
+        if next_token and next_token.type != TokenType.OPERATOR:
+            return left
         operator = yield from _match_token(state, ["MULTIPLY", "DIVIDE", "MOD", "DIV"])
     return left
 
@@ -434,10 +536,16 @@ def parse_additive(state: _ParserState):
     <additive> ::= <multiplicative> (('PLUS' | 'MINUS' | 'AMPERSAND') <multiplicative>)*
     """
     left = yield from parse_multiplicative(state)
+    next_token = yield from _peek_token(state)
+    if next_token and next_token.type != TokenType.OPERATOR:
+        return left
     operator = yield from _match_token(state, ["PLUS", "MINUS", "AMPERSAND"])
     while operator:
         right = yield from parse_multiplicative(state)
         left = BinaryExpression(left, operator.value, right, operator.line_number)
+        next_token = yield from _peek_token(state)
+        if next_token and next_token.type != TokenType.OPERATOR:
+            return left
         operator = yield from _match_token(state, ["PLUS", "MINUS", "AMPERSAND"])
     return left
 
@@ -471,10 +579,16 @@ def parse_logical_and(state: _ParserState):
     <logical_and> ::= <logical_not> ('AND' <logical_not>)*
     """
     left = yield from parse_locical_not(state)
+    next_token = yield from _peek_token(state)
+    if next_token and next_token.type != TokenType.OPERATOR:
+        return left
     operator = yield from _match_token(state, ["AND"])
     while operator:
         right = yield from parse_locical_not(state)
         left = BinaryExpression(left, operator.value, right, operator.line_number)
+        next_token = yield from _peek_token(state)
+        if next_token and next_token.type != TokenType.OPERATOR:
+            return left
         operator = yield from _match_token(state, ["AND"])
     return left
 
@@ -484,21 +598,18 @@ def parse_logical_or(state: _ParserState):
     <logical_or> ::= <logical_and> ('OR' <logical_and>)*
     """
     left = yield from parse_logical_and(state)
+    next_token = yield from _peek_token(state)
+    if next_token and next_token.type != TokenType.OPERATOR:
+        return left
     operator = yield from _match_token(state, ["OR"])
     while operator:
         right = yield from parse_logical_and(state)
         left = BinaryExpression(left, operator.value, right, operator.line_number)
+        next_token = yield from _peek_token(state)
+        if next_token and next_token.type != TokenType.OPERATOR:
+            return left
         operator = yield from _match_token(state, ["OR"])
     return left
-
-
-def parse_expression_inner(state: _ParserState):
-    """Parse an expression without emitting any visual Expression nodes.
-
-    Use this for sub-expressions inside a larger expression (e.g., function args,
-    array indices, parentheses) to avoid duplicating UI subtrees.
-    """
-    return (yield from parse_logical_or(state))
 
 
 def parse_expression(state: _ParserState):
@@ -529,7 +640,6 @@ def parse_declare_statement(state: _ParserState):
     """
     decl_node_id = yield from _visual_begin(state, "Declaration")
     try:
-        array = False
         declare_token = yield from _expect_token(state, ["DECLARE", "CONSTANT"])
 
         var_tokens = [(yield from _expect_token(state, [TokenType.IDENTIFIER]))]
@@ -556,36 +666,11 @@ def parse_declare_statement(state: _ParserState):
             var_node_ids.append((var_id, var_token.value, var_token.line_number))
 
         yield from _expect_token(state, ["COLON"])
-        next = yield from _peek_token(state)
-        if next and next.value == "ARRAY":
-            array = True
-            twoD = False
-            yield from _emit_ast_update(state, decl_node_id, "Declaration: 1D Array")
-            yield from _advance_token(state, "Consume ARRAY")  # consume 'ARRAY'
-            yield from _expect_token(state, ["LBRACKET"])
-
-            bounds_group_id = yield from _visual_begin(state, "Bounds")
-            lower = yield from parse_expression(state)
-            yield from _expect_token(state, ["COLON"])
-            upper = yield from parse_expression(state)
-            next = yield from _peek_token(state)
-            if next and next.value == "COMMA":
-                twoD = True
-                yield from _advance_token(state, "Consume COMMA")  # consume ','
-                yield from _emit_ast_update(state, decl_node_id, "Declaration: 2D Array")
-                lower2 = yield from parse_expression(state)
-                yield from _expect_token(state, ["COLON"])
-                upper2 = yield from parse_expression(state)
-            yield from _expect_token(state, ["RBRACKET"])
-            yield from _expect_token(state, ["OF"])
-            yield from _visual_end(state, bounds_group_id)
-        var_type = yield from _expect_token(
-            state, [TokenType.VARIABLE_TYPE, TokenType.IDENTIFIER]
-        )
+        type_spec: ParsedType = yield from parse_type(state)
         variables = []
         for var_token in var_tokens:
             variables.append(
-                Variable(var_token.value, var_token.line_number, var_type.value)
+                Variable(var_token.value, var_token.line_number, type_spec.element_type)
             )
 
         # Update earlier variable placeholders to their canonical label.
@@ -593,31 +678,39 @@ def parse_declare_statement(state: _ParserState):
             yield from _emit_ast_update(
                 state,
                 var_id,
-                Variable(name, line_number, var_type.value).unindented_representation(),
+                Variable(name, line_number, type_spec.element_type).unindented_representation(),
                 message="",
             )
             yield from _emit_ast_complete(state, var_id, message="")
 
-        if array:
-            if twoD:
+        if type_spec.is_array:
+            yield from _emit_ast_update(
+                state,
+                decl_node_id,
+                "Declaration: 2D Array" if type_spec.is_two_d else "Declaration: 1D Array",
+                message="",
+            )
+            assert type_spec.bounds1 is not None
+            if type_spec.is_two_d:
+                assert type_spec.bounds2 is not None
                 return TwoArrayDeclaration(
-                    var_type.value,
+                    type_spec.element_type,
                     variables,
-                    Bounds(lower, upper, lower.line),
-                    Bounds(lower2, upper2, lower2.line),
+                    type_spec.bounds1,
+                    type_spec.bounds2,
                     declare_token.line_number,
                     is_constant=(declare_token.value == "CONSTANT"),
                 )
             return OneArrayDeclaration(
-                var_type.value,
+                type_spec.element_type,
                 variables,
-                Bounds(lower, upper, lower.line),
+                type_spec.bounds1,
                 declare_token.line_number,
                 is_constant=(declare_token.value == "CONSTANT"),
             )
 
         return VariableDeclaration(
-            var_type.value,
+            type_spec.type_name,
             variables,
             declare_token.line_number,
             is_constant=(declare_token.value == "CONSTANT"),
@@ -955,15 +1048,12 @@ def parse_type_definition_statement(state: _ParserState):
             yield from _expect_token(state, ["DECLARE"])
             field_name_token = yield from _expect_token(state, [TokenType.IDENTIFIER])
             yield from _expect_token(state, ["COLON"])
-            field_type_token = yield from _expect_token(
-                state,
-                [TokenType.VARIABLE_TYPE, TokenType.IDENTIFIER],
-            )
+            field_type = yield from parse_type(state)
             fields.append(
                 Variable(
                     field_name_token.value,
                     field_name_token.line_number,
-                    field_type_token.value,
+                    field_type.type_name,
                 )
             )
             yield from _emit_ast_subtree(state, fields[-1], type_node_id)
@@ -979,10 +1069,8 @@ def parse_function_argument(state: _ParserState):
     """Parse a function argument (used in function definitions)."""
     param_token = yield from _expect_token(state, [TokenType.IDENTIFIER])
     yield from _expect_token(state, ["COLON"])
-    param_type_token = yield from _expect_token(
-        state, [TokenType.VARIABLE_TYPE, TokenType.IDENTIFIER]
-    )
-    return Argument(param_token.value, param_type_token.value, param_token.line_number)
+    param_type = yield from parse_type(state)
+    return Argument(param_token.value, param_type.type_name, param_token.line_number)
 
 
 def parse_return_statement(state: _ParserState):
@@ -1021,15 +1109,12 @@ def parse_function_definition(state: _ParserState):
         return_type = None
         if func_type_token.value == "FUNCTION":
             yield from _expect_token(state, ["RETURNS"])
-            return_type = yield from _expect_token(
-                state,
-                [TokenType.VARIABLE_TYPE, TokenType.IDENTIFIER],
-            )
+            return_type = yield from parse_type(state)
 
             # Emit Return Type as canonical child (before body).
             yield from _emit_ast_subtree(
                 state,
-                ReturnType(return_type.value, return_type.line_number),
+                ReturnType(return_type.type_name, func_type_token.line_number),
                 fn_node_id,
             )
 
@@ -1058,8 +1143,8 @@ def parse_function_definition(state: _ParserState):
             func_name_token.value,
             parameters,
             (
-                ReturnType(return_type.value, return_type.line_number)
-                if return_type
+                ReturnType(return_type.type_name, func_type_token.line_number)
+                if return_type is not None
                 else None
             ),
             body_statements,
@@ -1112,9 +1197,9 @@ def parse_right_string_method(state: _ParserState):
     """
     right_token = yield from _expect_token(state, ["RIGHT"])
     yield from _expect_token(state, ["LPAREN"])
-    string_expr = yield from parse_expression_inner(state)
+    string_expr = yield from parse_expression(state)
     yield from _expect_token(state, ["COMMA"])
-    count_expr = yield from parse_expression_inner(state)
+    count_expr = yield from parse_expression(state)
     yield from _expect_token(state, ["RPAREN"])
     return RightStringMethod(string_expr, count_expr, right_token.line_number)
 
@@ -1125,7 +1210,7 @@ def parse_length_string_method(state: _ParserState):
     """
     length_token = yield from _expect_token(state, ["LENGTH"])
     yield from _expect_token(state, ["LPAREN"])
-    string_expr = yield from parse_expression_inner(state)
+    string_expr = yield from parse_expression(state)
     yield from _expect_token(state, ["RPAREN"])
     return LengthStringMethod(string_expr, length_token.line_number)
 
@@ -1136,11 +1221,11 @@ def parse_mid_string_method(state: _ParserState):
     """
     mid_token = yield from _expect_token(state, ["MID"])
     yield from _expect_token(state, ["LPAREN"])
-    string_expr = yield from parse_expression_inner(state)
+    string_expr = yield from parse_expression(state)
     yield from _expect_token(state, ["COMMA"])
-    start_expr = yield from parse_expression_inner(state)
+    start_expr = yield from parse_expression(state)
     yield from _expect_token(state, ["COMMA"])
-    length_expr = yield from parse_expression_inner(state)
+    length_expr = yield from parse_expression(state)
     yield from _expect_token(state, ["RPAREN"])
     return MidStringMethod(string_expr, start_expr, length_expr, mid_token.line_number)
 
@@ -1151,7 +1236,7 @@ def parse_lower_string_method(state: _ParserState):
     """
     lcase_token = yield from _expect_token(state, ["LCASE"])
     yield from _expect_token(state, ["LPAREN"])
-    string_expr = yield from parse_expression_inner(state)
+    string_expr = yield from parse_expression(state)
     yield from _expect_token(state, ["RPAREN"])
     return LowerStringMethod(string_expr, lcase_token.line_number)
 
@@ -1162,7 +1247,7 @@ def parse_upper_string_method(state: _ParserState):
     """
     ucase_token = yield from _expect_token(state, ["UCASE"])
     yield from _expect_token(state, ["LPAREN"])
-    string_expr = yield from parse_expression_inner(state)
+    string_expr = yield from parse_expression(state)
     yield from _expect_token(state, ["RPAREN"])
     return UpperStringMethod(string_expr, ucase_token.line_number)
 
@@ -1173,7 +1258,7 @@ def parse_int_cast_function(state: _ParserState):
     """
     int_token = yield from _expect_token(state, ["INT"])
     yield from _expect_token(state, ["LPAREN"])
-    expr = yield from parse_expression_inner(state)
+    expr = yield from parse_expression(state)
     yield from _expect_token(state, ["RPAREN"])
     return IntCastMethod(expr, int_token.line_number)
 
@@ -1184,7 +1269,7 @@ def parse_rand_function(state: _ParserState):
     """
     rand_token = yield from _expect_token(state, ["RAND"])
     yield from _expect_token(state, ["LPAREN"])
-    expr = yield from parse_expression_inner(state)
+    expr = yield from parse_expression(state)
     yield from _expect_token(state, ["RPAREN"])
     return RandomRealMethod(expr, rand_token.line_number)
 
@@ -1237,7 +1322,7 @@ def parse_eof_function(state: _ParserState):
     """
     eof_token = yield from _expect_token(state, ["EOF"])
     yield from _expect_token(state, ["LPAREN"])
-    filename_expr = yield from parse_expression_inner(state)
+    filename_expr = yield from parse_expression(state)
     if not filename_expr:
         raise ParsingError(
             f"Line {eof_token.line_number}: Invalid filename expression in EOF function."

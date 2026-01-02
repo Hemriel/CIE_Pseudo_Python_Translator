@@ -391,55 +391,107 @@ def get_second_pass_reporter(ast_node, sym_table: SymbolTable, line: int, curren
         context = current_scope
 
         if isinstance(ast_node.variable, PropertyAccess):
-            # Check that the variable is declared, and remember it's type for property lookup
-            sym = sym_table.lookup(
-                ast_node.variable.variable.name,
-                ast_node.line,
-                context_scope=current_scope,
-            )
-            report.looked_at_tree_node_id = ast_node.unique_id
-            if not sym:
-                report.error = SemanticError(
-                    f"Line {ast_node.line}: Semantic error: variable '{ast_node.variable.variable.name}' not declared before use."
+            def _extract_array_element_type(type_name: str) -> str | None:
+                # Handles: ARRAY[T] and 2D ARRAY[T]
+                if type_name.startswith("ARRAY[") and type_name.endswith("]"):
+                    return type_name[len("ARRAY["):-1]
+                if type_name.startswith("2D ARRAY[") and type_name.endswith("]"):
+                    return type_name[len("2D ARRAY["):-1]
+                return None
+
+            def _infer_expr_type(expr: ASTNode, *, at_line: int, scope: str) -> str:
+                # Minimal type inference used to validate property access chains.
+                if isinstance(expr, Variable):
+                    sym = sym_table.lookup(expr.name, at_line, context_scope=scope)
+                    if not sym:
+                        raise SemanticError(
+                            f"Line {at_line}: Semantic error: variable '{expr.name}' not declared before use."
+                        )
+                    return sym.data_type
+
+                if isinstance(expr, OneArrayAccess):
+                    # Array variable must be declared; element type becomes the expression type.
+                    if not isinstance(expr.array, Variable):
+                        raise SemanticError(
+                            f"Line {at_line}: Semantic error: array access must target a declared array identifier."
+                        )
+                    sym = sym_table.lookup(expr.array.name, at_line, context_scope=scope)
+                    if not sym:
+                        raise SemanticError(
+                            f"Line {at_line}: Semantic error: array '{expr.array.name}' not declared before use."
+                        )
+                    elem = _extract_array_element_type(sym.data_type)
+                    if elem is None:
+                        raise SemanticError(
+                            f"Line {at_line}: Semantic error: '{expr.array.name}' is not an array."
+                        )
+                    return elem
+
+                if isinstance(expr, TwoArrayAccess):
+                    if not isinstance(expr.array, Variable):
+                        raise SemanticError(
+                            f"Line {at_line}: Semantic error: array access must target a declared array identifier."
+                        )
+                    sym = sym_table.lookup(expr.array.name, at_line, context_scope=scope)
+                    if not sym:
+                        raise SemanticError(
+                            f"Line {at_line}: Semantic error: array '{expr.array.name}' not declared before use."
+                        )
+                    elem = _extract_array_element_type(sym.data_type)
+                    if elem is None:
+                        raise SemanticError(
+                            f"Line {at_line}: Semantic error: '{expr.array.name}' is not an array."
+                        )
+                    return elem
+
+                if isinstance(expr, PropertyAccess):
+                    base_type = _infer_expr_type(expr.variable, at_line=at_line, scope=scope)
+                    composite_sym = sym_table.lookup(base_type, at_line, context_scope=scope)
+                    if not composite_sym:
+                        raise SemanticError(
+                            f"Line {at_line}: Semantic error: composite type '{base_type}' not declared before use."
+                        )
+                    prop_sym = sym_table.lookup(expr.property.name, at_line, context_scope=base_type)
+                    if not prop_sym:
+                        raise SemanticError(
+                            f"Line {at_line}: Semantic error: property '{expr.property.name}' not found in composite type '{base_type}'."
+                        )
+                    return prop_sym.data_type
+
+                raise SemanticError(
+                    f"Line {at_line}: Semantic error: unsupported expression in property access."
                 )
+
+            # Infer base type (supports chains like A[i].b.c).
+            try:
+                base_type = _infer_expr_type(ast_node.variable.variable, at_line=ast_node.line, scope=current_scope)
+            except SemanticError as e:
+                report.looked_at_tree_node_id = ast_node.unique_id
+                report.error = e
                 yield report
                 return
-            composite_type = sym.data_type
-            report.action_bar_message = f"Property access on variable '{ast_node.variable.variable.name}'. Found in context scope '{sym.scope}'."
-            report.looked_at_symbol = sym
-            yield report
 
-            composite_sym = sym_table.lookup(
-                composite_type,
-                ast_node.line,
-                context_scope=current_scope,
-            )
+            composite_sym = sym_table.lookup(base_type, ast_node.line, context_scope=current_scope)
             report.looked_at_tree_node_id = ast_node.unique_id
             if not composite_sym:
                 report.error = SemanticError(
-                    f"Line {ast_node.line}: Semantic error: composite type '{composite_type}' not declared before use."
+                    f"Line {ast_node.line}: Semantic error: composite type '{base_type}' not declared before use."
                 )
                 yield report
                 return
-            report.action_bar_message = f"Composite type '{composite_type}' found for property access."
-            report.looked_at_symbol = composite_sym
-            yield report
 
-            # Now check that the property exists in the composite type
             property_name = ast_node.variable.property.name
-            property_sym = sym_table.lookup(
-                property_name,
-                ast_node.line,
-                context_scope=composite_type,
-            )
-            report.looked_at_tree_node_id = ast_node.unique_id
+            property_sym = sym_table.lookup(property_name, ast_node.line, context_scope=base_type)
             if not property_sym:
                 report.error = SemanticError(
-                    f"Line {ast_node.line}: Semantic error: property '{property_name}' not found in composite type '{composite_type}'."
+                    f"Line {ast_node.line}: Semantic error: property '{property_name}' not found in composite type '{base_type}'."
                 )
                 yield report
                 return
-            report.action_bar_message = f"Property '{property_name}' found in composite type '{composite_type}'."
+
+            report.action_bar_message = (
+                f"Property '{property_name}' found in composite type '{base_type}'."
+            )
             report.looked_at_symbol = property_sym
             yield report
             return  # Property access checked, no need to check further
@@ -448,9 +500,21 @@ def get_second_pass_reporter(ast_node, sym_table: SymbolTable, line: int, curren
             name_check = ast_node.variable.name
             line_check = ast_node.line
         elif isinstance(ast_node.variable, OneArrayAccess):
+            if not isinstance(ast_node.variable.array, Variable):
+                report.error = SemanticError(
+                    f"Line {ast_node.line}: Semantic error: assignment to array element must target a declared array identifier."
+                )
+                yield report
+                return
             name_check = ast_node.variable.array.name
             line_check = ast_node.line
         elif isinstance(ast_node.variable, TwoArrayAccess):
+            if not isinstance(ast_node.variable.array, Variable):
+                report.error = SemanticError(
+                    f"Line {ast_node.line}: Semantic error: assignment to array element must target a declared array identifier."
+                )
+                yield report
+                return
             name_check = ast_node.variable.array.name
             line_check = ast_node.line
         

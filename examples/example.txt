@@ -1,76 +1,404 @@
 // CIE Pseudocode Calculator Program
 
-// Function to perform the calculation
-CONSTANT date <- 01/01/2025
+// ------------------------------------------------------------
+// CIE Pseudocode Calculator Program (teaching example)
+// - Supports all binary operators implemented by this project:
+//   +  -  *  /  DIV  MOD  ^  =  <>  <  <=  >  >=  AND  OR  &
+// - Keeps the most recent 100 calculations in memory.
+// - When memory is full, flushes the oldest 10 entries to a history file.
+// - History is shown from file (older/flushed) + current in-memory entries.
+// - History is appended to file during flushing and also at program end.
+// ------------------------------------------------------------
 
-FUNCTION Calculate(num1 : REAL, op : CHAR, num2 : REAL) RETURNS REAL
-    DECLARE return_value : REAL
-    CASE OF op
-        '+':
-            return_value <- num1 + num2
-        '-':
-            return_value <- num1 - num2
-        '*':
-            return_value <- num1 * num2
-        '/':
-            IF num2 = 0 THEN
-                OUTPUT "Error: Division by zero."
-                return_value <- 0
-            ELSE
-                return_value <- num1 / num2
-            ENDIF
-        OTHERWISE:
-            OUTPUT "Error: Invalid operator."
-            return_value <- 0
-    ENDCASE
-    RETURN return_value
-ENDFUNCTION
+CONSTANT HISTORY_FILE <- "calculator_history.txt"
+CONSTANT SEP <- "|"
 
-// Procedure to display the result
-PROCEDURE DisplayResult(num1 : REAL, op : CHAR, num2 : REAL, result : REAL)
-    OUTPUT num1, " ", op, " ", num2, " = ", result
-ENDPROCEDURE
+// A single history entry can represent numeric, boolean, or string calculations.
+// Fields not used for a given kind are left at their default values.
+TYPE CalcEntry
+    DECLARE kind : STRING        // "NUM", "BOOL", "STR"
+    DECLARE op : STRING          // operator as text (e.g. "+", "DIV", "<=")
+    DECLARE timestamp : STRING   // no built-in system date; we store a simple label
 
-TYPE Log
-    DECLARE date : DATE
-    DECLARE result : REAL
+    DECLARE num1 : REAL
+    DECLARE num2 : REAL
+    DECLARE resultNum : REAL
+
+    DECLARE bool1 : BOOLEAN
+    DECLARE bool2 : BOOLEAN
+    DECLARE resultBool : BOOLEAN
+
+    DECLARE str1 : STRING
+    DECLARE str2 : STRING
+    DECLARE resultStr : STRING
 ENDTYPE
 
-// Main program
-DECLARE num1, num2, result : REAL
-DECLARE op : CHAR
-DECLARE continueCalc : STRING
-DECLARE history : ARRAY[0:100] OF Log
-DECLARE matrix : ARRAY[0:10,0:10] OF REAL
-DECLARE index : INTEGER
-index <- 0
+
+// ------------------------ File utilities ------------------------
+
+PROCEDURE EnsureHistoryFileExists()
+    // Opening in APPEND mode creates the file if it does not exist.
+    OPENFILE HISTORY_FILE FOR APPEND
+    CLOSEFILE HISTORY_FILE
+ENDPROCEDURE
+
+
+PROCEDURE AppendEntryToFile(entry : CalcEntry)
+    // Appends ONE entry as a single line:
+    // kind|timestamp|op|<left>|<right>|<result>\n
+    //
+    // We write using multiple WRITEFILE calls to avoid needing STR().
+
+    WRITEFILE HISTORY_FILE, entry.kind
+    WRITEFILE HISTORY_FILE, SEP
+    WRITEFILE HISTORY_FILE, entry.timestamp
+    WRITEFILE HISTORY_FILE, SEP
+    WRITEFILE HISTORY_FILE, entry.op
+    WRITEFILE HISTORY_FILE, SEP
+
+    IF entry.kind = "NUM" THEN
+        WRITEFILE HISTORY_FILE, entry.num1
+        WRITEFILE HISTORY_FILE, SEP
+        WRITEFILE HISTORY_FILE, entry.num2
+        WRITEFILE HISTORY_FILE, SEP
+        WRITEFILE HISTORY_FILE, entry.resultNum
+    ELSE
+        IF entry.kind = "BOOL" THEN
+            WRITEFILE HISTORY_FILE, entry.bool1
+            WRITEFILE HISTORY_FILE, SEP
+            WRITEFILE HISTORY_FILE, entry.bool2
+            WRITEFILE HISTORY_FILE, SEP
+            WRITEFILE HISTORY_FILE, entry.resultBool
+        ELSE
+            // "STR"
+            WRITEFILE HISTORY_FILE, entry.str1
+            WRITEFILE HISTORY_FILE, SEP
+            WRITEFILE HISTORY_FILE, entry.str2
+            WRITEFILE HISTORY_FILE, SEP
+            WRITEFILE HISTORY_FILE, entry.resultStr
+        ENDIF
+    ENDIF
+
+    WRITEFILE HISTORY_FILE, "\n"
+ENDPROCEDURE
+
+
+PROCEDURE ShowHistoryFromFile()
+    // Show all history already persisted in the file.
+    // Note: we close/reopen because the program keeps the file open for APPEND.
+    CLOSEFILE HISTORY_FILE
+
+    OPENFILE HISTORY_FILE FOR READ
+    OUTPUT "----- History from file (older / already flushed) -----"
+    WHILE NOT EOF(HISTORY_FILE)
+        DECLARE line : STRING
+        READFILE HISTORY_FILE INTO line
+        OUTPUT line
+    ENDWHILE
+    CLOSEFILE HISTORY_FILE
+
+    // Re-open for appending new flushed entries.
+    OPENFILE HISTORY_FILE FOR APPEND
+ENDPROCEDURE
+
+
+// ------------------------ Operator evaluation ------------------------
+
+FUNCTION EvalNumeric(a : REAL, op : STRING, b : REAL) RETURNS REAL
+    // Numeric operators:
+    // +  -  *  /  DIV  MOD  ^
+
+    DECLARE result : REAL
+
+    CASE OF op
+        "+":
+            result <- a + b
+        "-":
+            result <- a - b
+        "*":
+            result <- a * b
+        "/":
+            IF b = 0 THEN
+                OUTPUT "Error: Division by zero."
+                result <- 0
+            ELSE
+                result <- a / b
+            ENDIF
+        "DIV":
+            // Integer division (truncates toward -infinity in Python)
+            result <- a DIV b
+        "MOD":
+            result <- a MOD b
+        "^":
+            result <- a ^ b
+        OTHERWISE:
+            OUTPUT "Error: Unknown numeric operator."
+            result <- 0
+    ENDCASE
+
+    RETURN result
+ENDFUNCTION
+
+
+FUNCTION EvalComparison(a : REAL, op : STRING, b : REAL) RETURNS BOOLEAN
+    // Comparison operators:
+    // =  <>  <  <=  >  >=
+
+    DECLARE result : BOOLEAN
+
+    CASE OF op
+        "=":
+            result <- a = b
+        "<>":
+            result <- a <> b
+        "<":
+            result <- a < b
+        "<=":
+            result <- a <= b
+        ">":
+            result <- a > b
+        ">=":
+            result <- a >= b
+        OTHERWISE:
+            OUTPUT "Error: Unknown comparison operator."
+            result <- FALSE
+    ENDCASE
+
+    RETURN result
+ENDFUNCTION
+
+
+FUNCTION EvalBoolean(a : BOOLEAN, op : STRING, b : BOOLEAN) RETURNS BOOLEAN
+    // Boolean operators:
+    // AND  OR
+
+    DECLARE result : BOOLEAN
+
+    CASE OF op
+        "AND":
+            result <- a AND b
+        "OR":
+            result <- a OR b
+        OTHERWISE:
+            OUTPUT "Error: Unknown boolean operator."
+            result <- FALSE
+    ENDCASE
+
+    RETURN result
+ENDFUNCTION
+
+
+FUNCTION EvalStringConcat(a : STRING, op : STRING, b : STRING) RETURNS STRING
+    // String operator:
+    // &  (concatenation)
+
+    DECLARE result : STRING
+
+    IF op = "&" THEN
+        result <- a & b
+    ELSE
+        OUTPUT "Error: Unknown string operator."
+        result <- ""
+    ENDIF
+
+    RETURN result
+ENDFUNCTION
+
+
+// ------------------------ In-memory history management ------------------------
+
+PROCEDURE FlushOldest10ToFile(history : ARRAY[0:99] OF CalcEntry, count : INTEGER)
+    // Flush up to 10 oldest entries to the history file (append-only).
+    // Only flushes if there is something to flush.
+    DECLARE i : INTEGER
+    DECLARE flushCount : INTEGER
+
+    flushCount <- 10
+    IF count < 10 THEN
+        flushCount <- count
+    ENDIF
+
+    FOR i <- 0 TO flushCount - 1
+        CALL AppendEntryToFile(history[i])
+    NEXT i
+ENDPROCEDURE
+
+
+PROCEDURE ShiftHistoryLeftBy10(history : ARRAY[0:99] OF CalcEntry, count : INTEGER)
+    // After flushing 10, move entries [10..count-1] down to [0..count-11].
+    DECLARE i : INTEGER
+    FOR i <- 10 TO count - 1
+        history[i - 10] <- history[i]
+    NEXT i
+ENDPROCEDURE
+
+
+PROCEDURE AddToHistory(history : ARRAY[0:99] OF CalcEntry, count : INTEGER, entry : CalcEntry)
+    // Keeps at most 100 entries in memory. When full:
+    // - append (flush) the oldest 10 to file
+    // - shift remaining 90 left
+    // - set count to 90
+    // then add the new entry.
+
+    IF count = 100 THEN
+        CALL FlushOldest10ToFile(history, count)
+        CALL ShiftHistoryLeftBy10(history, count)
+        count <- 90
+    ENDIF
+
+    history[count] <- entry
+    count <- count + 1
+ENDPROCEDURE
+
+
+PROCEDURE ShowInMemoryHistory(history : ARRAY[0:99] OF CalcEntry, count : INTEGER)
+    OUTPUT "----- Recent history in memory (up to 100) -----"
+
+    DECLARE i : INTEGER
+    FOR i <- 0 TO count - 1
+        IF history[i].kind = "NUM" THEN
+            OUTPUT history[i].timestamp, " ", history[i].num1, " ", history[i].op, " ", history[i].num2, " = ", history[i].resultNum
+        ELSE
+            IF history[i].kind = "BOOL" THEN
+                OUTPUT history[i].timestamp, " ", history[i].bool1, " ", history[i].op, " ", history[i].bool2, " = ", history[i].resultBool
+            ELSE
+                // "STR"
+                OUTPUT history[i].timestamp, " ", history[i].str1, " ", history[i].op, " ", history[i].str2, " = ", history[i].resultStr
+            ENDIF
+        ENDIF
+    NEXT i
+ENDPROCEDURE
+
+
+// ------------------------ Helpers for typed input ------------------------
+
+FUNCTION ReadBoolean(prompt : STRING) RETURNS BOOLEAN
+    // INPUT uses a helper that may convert types, so we read into STRING and then map to TRUE/FALSE.
+    DECLARE text : STRING
+    DECLARE value : BOOLEAN
+
+    OUTPUT prompt
+    INPUT text
+
+    IF LCASE(text) = "true" THEN
+        value <- TRUE
+    ELSE
+        value <- FALSE
+    ENDIF
+
+    RETURN value
+ENDFUNCTION
+
+
+// ------------------------ Main program ------------------------
+
+CALL EnsureHistoryFileExists()
+
+// Open once for APPEND; we will temporarily close/reopen for READ when viewing history.
+OPENFILE HISTORY_FILE FOR APPEND
+
+DECLARE history : ARRAY[0:99] OF CalcEntry
+DECLARE historyCount : INTEGER
+historyCount <- 0
+
+OUTPUT "Calculator started."
+OUTPUT "Supported operators: +  -  *  /  DIV  MOD  ^  =  <>  <  <=  >  >=  AND  OR  &"
+OUTPUT "History is appended to: ", HISTORY_FILE
+
+// Show what is already in the file at startup ("loaded from file at the start").
+CALL ShowHistoryFromFile()
 
 REPEAT
-    OUTPUT "Enter the first number:"
-    INPUT num1
-    OUTPUT "Enter an operator (+, -, *, /):"
-    INPUT op
-    OUTPUT "Enter the second number:"
-    INPUT num2
+    OUTPUT ""
+    OUTPUT "Menu:"
+    OUTPUT "  1) Calculate"
+    OUTPUT "  2) View history"
+    OUTPUT "  3) Quit"
+    OUTPUT "Enter choice (1/2/3):"
 
-    result <- Calculate(num1, op, num2)
-    IF index = 101 THEN
-        FOR i <- 10 TO 100
-            history[i - 10] <- history[i]
-            FOR j <- 0 TO 3
-                OUTPUT "..."
-            NEXT j
-        NEXT i
-        index <- 91
+    DECLARE choice : STRING
+    INPUT choice
+    choice <- LCASE(choice)
+
+    IF choice = "2" THEN
+        // Show older entries from file + current in-memory entries.
+        CALL ShowHistoryFromFile()
+        CALL ShowInMemoryHistory(history, historyCount)
+    ELSE
+        IF choice = "1" THEN
+            // Read operator first, then decide what to ask for.
+            OUTPUT "Enter operator:"
+            OUTPUT "  Numeric: +  -  *  /  DIV  MOD  ^"
+            OUTPUT "  Compare: =  <>  <  <=  >  >="
+            OUTPUT "  Boolean: AND  OR"
+            OUTPUT "  String : &"
+            DECLARE op : STRING
+            INPUT op
+            op <- UCASE(op)
+
+            DECLARE entry : CalcEntry
+            entry.op <- op
+
+            // Simple teaching timestamp: user types something meaningful.
+            OUTPUT "Enter a timestamp label (e.g. 01/01/2025 or lesson name):"
+            INPUT entry.timestamp
+
+            // Decide which evaluator to use.
+            IF op = "AND" OR op = "OR" THEN
+                entry.kind <- "BOOL"
+                entry.bool1 <- ReadBoolean("Enter first boolean (true/false):")
+                entry.bool2 <- ReadBoolean("Enter second boolean (true/false):")
+                entry.resultBool <- EvalBoolean(entry.bool1, entry.op, entry.bool2)
+
+                OUTPUT "Result: ", entry.resultBool
+                CALL AddToHistory(history, historyCount, entry)
+
+            ELSE
+                IF op = "&" THEN
+                    entry.kind <- "STR"
+                    OUTPUT "Enter first string:"
+                    INPUT entry.str1
+                    OUTPUT "Enter second string:"
+                    INPUT entry.str2
+                    entry.resultStr <- EvalStringConcat(entry.str1, entry.op, entry.str2)
+
+                    OUTPUT "Result: ", entry.resultStr
+                    CALL AddToHistory(history, historyCount, entry)
+
+                ELSE
+                    // Numeric or comparison: use REAL inputs.
+                    entry.num1 <- 0
+                    entry.num2 <- 0
+
+                    OUTPUT "Enter first number:"
+                    INPUT entry.num1
+                    OUTPUT "Enter second number:"
+                    INPUT entry.num2
+
+                    // Determine whether op is a comparison operator.
+                    IF op = "=" OR op = "<>" OR op = "<" OR op = "<=" OR op = ">" OR op = ">=" THEN
+                        entry.kind <- "BOOL"
+                        entry.resultBool <- EvalComparison(entry.num1, entry.op, entry.num2)
+                        OUTPUT "Result: ", entry.resultBool
+                        CALL AddToHistory(history, historyCount, entry)
+                    ELSE
+                        entry.kind <- "NUM"
+                        entry.resultNum <- EvalNumeric(entry.num1, entry.op, entry.num2)
+                        OUTPUT "Result: ", entry.resultNum
+                        CALL AddToHistory(history, historyCount, entry)
+                    ENDIF
+                ENDIF
+            ENDIF
+        ENDIF
     ENDIF
-    DECLARE new_log : Log
-    new_log.date <- 01/01/2026
-    new_log.result <- result
-    history[index] <- new_log
-    CALL DisplayResult(num1, op, num2, result)
 
-    OUTPUT "Do you want to perform another calculation? (yes/no):"
-    INPUT continueCalc
-UNTIL NOT LCASE(continueCalc) = "yes"
+UNTIL choice = "3"
 
-// End of program
+// Before exit: append everything still in memory to the file.
+DECLARE k : INTEGER
+FOR k <- 0 TO historyCount - 1
+    CALL AppendEntryToFile(history[k])
+NEXT k
+
+CLOSEFILE HISTORY_FILE
+OUTPUT "Goodbye. History written to file."

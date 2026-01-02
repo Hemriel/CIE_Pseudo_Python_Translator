@@ -762,7 +762,7 @@ class OneArrayAccess(Expression, Assignable):
         This node compiles `A[i]` into `(A[1][i - A[0]])`.
     """
 
-    def __init__(self, array: Variable, index: Expression, line: int):
+    def __init__(self, array: Expression, index: Expression, line: int):
         """
         Initialize the ArrayAccess instance.
 
@@ -788,16 +788,40 @@ class OneArrayAccess(Expression, Assignable):
         Yields:
             CodeGenerationReport: Events containing expression fragments.
         """
+        # Arrays are represented as tuples: (lower_bound, backing_list).
+        # If the base is not a simple variable, avoid re-evaluating it by capturing it once.
+        if isinstance(self.array, Variable):
+            base_name = self.array.name
+            report = CodeGenerationReport()
+            report.action_bar_message = f"Generating code for 1D array access: {base_name}"
+            report.looked_at_tree_node_id = self.unique_id
+            report.new_code = f"({base_name}[1]["
+            yield report
+            yield from self.index.generate_code()
+            report = CodeGenerationReport()
+            report.action_bar_message = f"Generating code for 1D array access: {base_name} (adjusting index)"
+            report.looked_at_tree_node_id = self.unique_id
+            report.new_code = f" - {base_name}[0]])"
+            yield report
+            return
+
+        tmp_name = f"__cie_tmp_{self.unique_id}"
         report = CodeGenerationReport()
-        report.action_bar_message = f"Generating code for 1D array access: {self.array.name}"
+        report.action_bar_message = "Generating code for 1D array access (capturing base)"
         report.looked_at_tree_node_id = self.unique_id
-        report.new_code = f"({self.array.name}[1]["
+        report.new_code = f"(({tmp_name} := "
+        yield report
+        yield from self.array.generate_code()
+        report = CodeGenerationReport()
+        report.action_bar_message = "Generating code for 1D array access (indexing backing list)"
+        report.looked_at_tree_node_id = self.unique_id
+        report.new_code = f")[1]["
         yield report
         yield from self.index.generate_code()
         report = CodeGenerationReport()
-        report.action_bar_message = f"Generating code for 1D array access: {self.array.name} (adjusting index)"
+        report.action_bar_message = "Generating code for 1D array access (adjusting index)"
         report.looked_at_tree_node_id = self.unique_id
-        report.new_code = f" - {self.array.name}[0]])"
+        report.new_code = f" - {tmp_name}[0]])"
         yield report
 
     def __repr__(self):
@@ -825,7 +849,7 @@ class TwoArrayAccess(Expression, Assignable):
     """
 
     def __init__(
-        self, array: Variable, index1: Expression, index2: Expression, line: int
+        self, array: Expression, index1: Expression, index2: Expression, line: int
     ):
         """
         Initialize the TwoArrayAccess instance.
@@ -854,22 +878,51 @@ class TwoArrayAccess(Expression, Assignable):
         Yields:
             CodeGenerationReport: Events containing expression fragments.
         """
+        # 2D arrays are tuples: (low1, low2, backing_matrix).
+        if isinstance(self.array, Variable):
+            base_name = self.array.name
+            report = CodeGenerationReport()
+            report.action_bar_message = f"Generating code for 2D array access: {base_name}"
+            report.looked_at_tree_node_id = self.unique_id
+            report.new_code = f"({base_name}[2]["
+            yield report
+            yield from self.index1.generate_code()
+            report = CodeGenerationReport()
+            report.action_bar_message = f"Generating code for 2D array access: {base_name} (adjusting first index)"
+            report.looked_at_tree_node_id = self.unique_id
+            report.new_code = f" - {base_name}[0]]["
+            yield report
+            yield from self.index2.generate_code()
+            report = CodeGenerationReport()
+            report.action_bar_message = f"Generating code for 2D array access: {base_name} (adjusting second index)"
+            report.looked_at_tree_node_id = self.unique_id
+            report.new_code = f" - {base_name}[1]])"
+            yield report
+            return
+
+        tmp_name = f"__cie_tmp_{self.unique_id}"
         report = CodeGenerationReport()
-        report.action_bar_message = f"Generating code for 2D array access: {self.array.name}"
+        report.action_bar_message = "Generating code for 2D array access (capturing base)"
         report.looked_at_tree_node_id = self.unique_id
-        report.new_code = f"({self.array.name}[2]["
+        report.new_code = f"(({tmp_name} := "
+        yield report
+        yield from self.array.generate_code()
+        report = CodeGenerationReport()
+        report.action_bar_message = "Generating code for 2D array access (indexing backing matrix)"
+        report.looked_at_tree_node_id = self.unique_id
+        report.new_code = f")[2]["
         yield report
         yield from self.index1.generate_code()
         report = CodeGenerationReport()
-        report.action_bar_message = f"Generating code for 2D array access: {self.array.name} (adjusting first index)"
+        report.action_bar_message = "Generating code for 2D array access (adjusting first index)"
         report.looked_at_tree_node_id = self.unique_id
-        report.new_code = f" - {self.array.name}[0]]["
+        report.new_code = f" - {tmp_name}[0]]["
         yield report
         yield from self.index2.generate_code()
         report = CodeGenerationReport()
-        report.action_bar_message = f"Generating code for 2D array access: {self.array.name} (adjusting second index)"
+        report.action_bar_message = "Generating code for 2D array access (adjusting second index)"
         report.looked_at_tree_node_id = self.unique_id
-        report.new_code = f" - {self.array.name}[1]])"
+        report.new_code = f" - {tmp_name}[1]])"
         yield report
 
     def __repr__(self):
@@ -893,7 +946,7 @@ class PropertyAccess(Expression, Assignable):
         This is used for user-defined record types compiled to Python classes.
     """
 
-    def __init__(self, variable: Variable, property: Variable, line: int):
+    def __init__(self, variable: Expression, property: Variable, line: int):
         """
         Initialize the PropertyAccess instance.
 
@@ -921,7 +974,7 @@ class PropertyAccess(Expression, Assignable):
         """
         yield from self.variable.generate_code()
         report = CodeGenerationReport()
-        report.action_bar_message = f"Generating code for property access: {self.variable.name}.{self.property.name}"
+        report.action_bar_message = f"Generating code for property access: {self.property.name}"
         report.looked_at_tree_node_id = self.unique_id
         report.new_code = f"."
         yield report
