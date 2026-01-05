@@ -341,7 +341,9 @@ REPEAT
 
             // Simple teaching timestamp: user types something meaningful.
             OUTPUT "Enter a timestamp label (e.g. 01/01/2025 or lesson name):"
-            INPUT entry.timestamp
+            DECLARE timestamp : STRING
+            INPUT timestamp
+            entry.timestamp <- timestamp
 
             // Decide which evaluator to use.
             IF op = "AND" OR op = "OR" THEN
@@ -357,9 +359,12 @@ REPEAT
                 IF op = "&" THEN
                     entry.kind <- "STR"
                     OUTPUT "Enter first string:"
-                    INPUT entry.str1
+                    DECLARE str1, str2 : STRING
+                    INPUT str1 
+                    entry.str1 <- str1
                     OUTPUT "Enter second string:"
-                    INPUT entry.str2
+                    INPUT str2
+                    entry.str2 <- str2
                     entry.resultStr <- EvalStringConcat(entry.str1, entry.op, entry.str2)
 
                     OUTPUT "Result: ", entry.resultStr
@@ -371,9 +376,12 @@ REPEAT
                     entry.num2 <- 0
 
                     OUTPUT "Enter first number:"
-                    INPUT entry.num1
+                    DECLARE num1, num2 : REAL
+                    INPUT num1
+                    entry.num1 <- num1
                     OUTPUT "Enter second number:"
-                    INPUT entry.num2
+                    INPUT num2
+                    entry.num2 <- num2
 
                     // Determine whether op is a comparison operator.
                     IF op = "=" OR op = "<>" OR op = "<" OR op = "<=" OR op = ">" OR op = ">=" THEN

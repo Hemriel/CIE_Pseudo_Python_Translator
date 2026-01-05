@@ -387,13 +387,17 @@ def parse_primary(state: _ParserState):
             "EOF: Unexpected end of input while parsing primary expression."
         )
 
-    # Identifier (variable, function call, array access, or property access)
+    # Identifier atom + optional single call + postfix chaining (.[prop] and [index]).
     if next_token.type == TokenType.IDENTIFIER:
         token = yield from _expect_token(state, [TokenType.IDENTIFIER])
 
-        # If next token is '(', it's a function call
+        expr: Expression = Variable(token.value, token.line_number)
+        has_call = False
+
+        # Allow at most one call, immediately after identifier.
         if (yield from _match_token(state, ["LPAREN"])):
-            args = []
+            has_call = True
+            args: list[Expression] = []
             if not (yield from _match_token(state, ["RPAREN"])):
                 while True:
                     arg = yield from parse_expression(state)
@@ -404,44 +408,44 @@ def parse_primary(state: _ParserState):
 
                     yield from _expect_token(state, ["RPAREN"])
                     break
+            expr = FunctionCall(token.value, Arguments(args, token.line_number), token.line_number)
 
-            return FunctionCall(
-                token.value, Arguments(args, token.line_number), token.line_number
-            )
+        # Postfix chain: allow any number of array/property accesses.
+        while True:
+            if (yield from _match_token(state, ["LBRACKET"])):
+                index_expr = yield from parse_expression(state)
+                comma = yield from _match_token(state, ["COMMA"])
+                index_expr2 = None
+                if comma:
+                    index_expr2 = yield from parse_expression(state)
 
-        # if next token is '[', it's an array access
-        elif (yield from _match_token(state, ["LBRACKET"])):
-            index_expr = yield from parse_expression(state)
-            comma = yield from _match_token(state, ["COMMA"])
-            if comma:
-                index_expr2 = yield from parse_expression(state)
+                yield from _expect_token(state, ["RBRACKET"])  # consume ']'
 
-            yield from _expect_token(state, ["RBRACKET"])  # consume ']'
+                if comma:
+                    assert index_expr2 is not None
+                    expr = TwoArrayAccess(expr, index_expr, index_expr2, token.line_number)
+                else:
+                    expr = OneArrayAccess(expr, index_expr, token.line_number)
+                continue
 
-            if comma:
-                return TwoArrayAccess(
-                    Variable(token.value, token.line_number),
-                    index_expr,
-                    index_expr2,
+            if (yield from _match_token(state, ["DOT"])):
+                property_token = yield from _expect_token(state, [TokenType.IDENTIFIER])
+                expr = PropertyAccess(
+                    expr,
+                    Variable(property_token.value, property_token.line_number),
                     token.line_number,
                 )
+                continue
 
-            return OneArrayAccess(
-                Variable(token.value, token.line_number), index_expr, token.line_number
-            )
+            # CIE disallows treating calls as first-class; do not allow chained calls.
+            if (yield from _match_token(state, ["LPAREN"])):
+                raise ParsingError(
+                    f"Line {token.line_number}: Chained function calls are not supported."
+                )
 
-        # If next token is '.', it's a property access
-        elif (yield from _match_token(state, ["DOT"])):
-            property_token = yield from _expect_token(state, [TokenType.IDENTIFIER])
-            return PropertyAccess(
-                Variable(token.value, token.line_number),
-                Variable(property_token.value, property_token.line_number),
-                token.line_number,
-            )
+            break
 
-        # Otherwise, it's a variable
-        return Variable(token.value, token.line_number)
-    
+        return expr
     # Literal values
     elif next_token.type in [
         TokenType.INT_LITERAL,
@@ -458,6 +462,8 @@ def parse_primary(state: _ParserState):
     elif (yield from _match_token(state, ["LPAREN"])):
         expr = yield from parse_expression(state)
         yield from _expect_token(state, ["RPAREN"])  # consume ')'
+        # IMPORTANT: To keep things simple and explicit (per project constraints),
+        # do not allow postfix chaining (.[prop] / [index]) on parenthesized expressions.
         return expr
 
     # Built-in string functions
