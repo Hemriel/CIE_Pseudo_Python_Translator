@@ -3,7 +3,50 @@ from __future__ import annotations
 from collections.abc import Generator
 from dataclasses import dataclass
 
-from CompilerComponents.AST import *
+from CompilerComponents.AST import (
+    ASTNode,
+    Argument,
+    Arguments,
+    AssignmentStatement,
+    BinaryExpression,
+    Bounds,
+    CaseStatement,
+    CloseFileStatement,
+    CompositeDataType,
+    Condition,
+    EOFStatement,
+    Expression,
+    ForStatement,
+    FunctionCall,
+    FunctionDefinition,
+    IfStatement,
+    InputStatement,
+    IntCastMethod,
+    LengthStringMethod,
+    Literal,
+    LowerStringMethod,
+    MidStringMethod,
+    OneArrayAccess,
+    OneArrayDeclaration,
+    OpenFileStatement,
+    OutputStatement,
+    PostWhileStatement,
+    PropertyAccess,
+    RandomRealMethod,
+    ReadFileStatement,
+    ReturnStatement,
+    ReturnType,
+    RightStringMethod,
+    Statements,
+    TwoArrayAccess,
+    TwoArrayDeclaration,
+    UnaryExpression,
+    UpperStringMethod,
+    Variable,
+    VariableDeclaration,
+    WhileStatement,
+    WriteFileStatement,
+)
 from CompilerComponents.ProgressReport import ParsingReport
 from CompilerComponents.Token import Token, TokenType
 

@@ -1,4 +1,4 @@
-from CompilerComponents.AST import *
+from CompilerComponents.AST import ASTNode
 from CompilerComponents.ProgressReport import CodeGenerationReport
 from collections.abc import Generator
 from pathlib import Path

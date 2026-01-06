@@ -1,7 +1,37 @@
 from CompilerComponents.ProgressReport import FirstPassReport, SecondPassReport
-from CompilerComponents.Symbols import *
-from CompilerComponents.AST import *
 from collections.abc import Generator
+from CompilerComponents.Symbols import SemanticError, Symbol, SymbolTable
+from CompilerComponents.AST import (
+    ASTNode,
+    AssignmentStatement,
+    BinaryExpression,
+    CaseStatement,
+    CloseFileStatement,
+    CompositeDataType,
+    ForStatement,
+    FunctionCall,
+    FunctionDefinition,
+    IfStatement,
+    InputStatement,
+    Literal,
+    OneArrayAccess,
+    OneArrayDeclaration,
+    OpenFileStatement,
+    OutputStatement,
+    PostWhileStatement,
+    PropertyAccess,
+    ReadFileStatement,
+    ReturnStatement,
+    ReturnType,
+    Statements,
+    TwoArrayAccess,
+    TwoArrayDeclaration,
+    UnaryExpression,
+    Variable,
+    VariableDeclaration,
+    WhileStatement,
+    WriteFileStatement,
+)
 
 ### Semantic analysis of the parsed AST ###
 
