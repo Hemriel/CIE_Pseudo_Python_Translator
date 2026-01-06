@@ -1,7 +1,7 @@
 from CompilerComponents.Token import Token
 from CompilerComponents.CleanLine import CleanLine
 from CompilerComponents.Symbols import Symbol
-from textual.widgets.tree import NodeID
+from CompilerComponents.Types import ASTNodeId
 
 class ProgressReport:
     def __init__(self):
@@ -100,7 +100,7 @@ class FirstPassReport(ProgressReport):
         super().__init__()
         self.current_phase_number = "3.1"
         self.new_symbol : Symbol | None = None
-        self.looked_at_tree_node_id : NodeID | None = None
+        self.looked_at_tree_node_id : ASTNodeId | None = None
         self.error : Exception | None = None
         
 
@@ -111,7 +111,7 @@ class SecondPassReport(ProgressReport):
     def __init__(self):
         super().__init__()
         self.current_phase_number = "3.2"
-        self.looked_at_tree_node_id : NodeID | None = None
+        self.looked_at_tree_node_id : ASTNodeId | None = None
         self.looked_at_symbol : Symbol | None = None
         self.error : Exception | None = None
     
@@ -122,6 +122,6 @@ class CodeGenerationReport(ProgressReport):
     def __init__(self):
         super().__init__()
         self.current_phase_number = "4"
-        self.looked_at_tree_node_id : NodeID | None = None
+        self.looked_at_tree_node_id : ASTNodeId | None = None
         self.new_code : str | None = None
         

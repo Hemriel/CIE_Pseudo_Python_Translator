@@ -3,7 +3,7 @@
 ### Helper function to convert operators to python code ###
 from CompilerComponents.ProgressReport import CodeGenerationReport
 from CompilerComponents.Token import TokenType, LITERAL_TYPES
-from textual.widgets.tree import NodeID
+from CompilerComponents.Types import ASTNodeId
 from collections.abc import Generator
 
 
@@ -85,7 +85,7 @@ class ASTNode:
         self.line: int = line
         self.edges: list[ASTNode] = []
         self.override_last = None
-        self.unique_id: NodeID | None = None  # Assigned during AST construction
+        self.unique_id: ASTNodeId | None = None  # Assigned during AST construction
 
     def tree_representation(self, prefix="", is_last=True) -> str:
         """Return a string representation of the node with indentation.
