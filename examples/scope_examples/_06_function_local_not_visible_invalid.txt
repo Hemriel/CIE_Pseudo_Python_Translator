@@ -1,0 +1,15 @@
+// Scope tests: function-local variables are not visible globally
+// EXPECTED: INVALID (one error) -> use of 'z' outside the function
+
+FUNCTION MakeZ() RETURNS INTEGER
+    DECLARE z : INTEGER
+    z <- 42
+    RETURN z
+ENDFUNCTION
+
+DECLARE r : INTEGER
+r <- MakeZ()
+OUTPUT "r=", r
+
+// ERROR: 'z' not declared in global scope
+OUTPUT "z=", z

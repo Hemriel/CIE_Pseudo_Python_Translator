@@ -346,9 +346,9 @@ class Variable(Expression, Assignable):
         report = CodeGenerationReport()
         report.action_bar_message = f"Generating code for variable: {self.name}"
         report.looked_at_tree_node_id = self.unique_id
-        report.new_code = self.name + (
-            f": {CIE_TO_PYTHON_TYPE_MAP.get(self.type, self.type)}" if with_type else ""
-        )
+        report.new_code = self.name
+        if with_type and self.type != "unknown" and "ARRAY" not in self.type:
+            report.new_code += f": {CIE_TO_PYTHON_TYPE_MAP.get(self.type, self.type)}"
         yield report
 
     def __repr__(self):
@@ -398,11 +398,9 @@ class Argument(Expression):
         report = CodeGenerationReport()
         report.action_bar_message = f"Generating code for argument: {self.name}"
         report.looked_at_tree_node_id = self.unique_id
-        report.new_code = self.name + (
-            f": {CIE_TO_PYTHON_TYPE_MAP.get(self.arg_type, self.arg_type)}"
-            if with_type
-            else ""
-        )
+        report.new_code = self.name
+        if with_type and self.arg_type != "unknown" and "ARRAY" not in self.arg_type:
+            report.new_code += f": {CIE_TO_PYTHON_TYPE_MAP.get(self.arg_type, self.arg_type)}"
         yield report
 
     def __repr__(self):

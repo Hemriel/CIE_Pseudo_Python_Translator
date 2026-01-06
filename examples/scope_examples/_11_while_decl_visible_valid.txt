@@ -1,0 +1,14 @@
+// Scope tests: declarations inside WHILE remain visible after ENDWHILE
+// EXPECTED: valid
+
+DECLARE c : INTEGER
+c <- 0
+
+WHILE c < 1
+    DECLARE t : INTEGER
+    t <- 123
+    c <- c + 1
+ENDWHILE
+
+// Since WHILE does not create a scope, 't' is still visible here
+OUTPUT "t=", t

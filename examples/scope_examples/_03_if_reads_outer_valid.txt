@@ -1,0 +1,11 @@
+// Scope tests: IF can read variables from the current scope (no block scope)
+// EXPECTED: valid
+
+DECLARE a : INTEGER
+a <- 7
+
+IF TRUE THEN
+    // No local 'a' declared here; should resolve to global 'a'
+    OUTPUT "a=", a
+ENDIF
+

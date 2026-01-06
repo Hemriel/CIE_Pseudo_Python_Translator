@@ -360,7 +360,7 @@ def _emit_ast_subtree(
     yield from _emit_ast_complete(state, node_id)
 
     # Fallback: show node class name.
-    yield from _emit_ast_final_node(state, parent_id, node.__class__.__name__)
+    # yield from _emit_ast_final_node(state, parent_id, node.__class__.__name__)
 
 
 ### Parsing expressions ###

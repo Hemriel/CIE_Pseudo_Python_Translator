@@ -109,6 +109,13 @@ class SymbolTable:
             return self.lookup(identifier, line, parent_scope)
         return None
 
+    def lookup_local(self, identifier, line, scope="global") -> Symbol | None:
+        # Look for the symbol only in the provided scope (no parent scope traversal)
+        for sym in reversed(self.symbols):
+            if sym.identifier == identifier and sym.scope == scope and sym.line <= line:
+                return sym
+        return None
+
     def __str__(self) -> str:
         result = "Symbol Table:\n"
         for sym in self.symbols:

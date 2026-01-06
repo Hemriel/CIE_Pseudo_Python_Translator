@@ -1,0 +1,13 @@
+// Scope tests: property access must match the custom type fields exactly
+// EXPECTED: INVALID (one error) -> property 'age' not in Person, no reading of global age
+
+DECLARE age : INTEGER
+
+TYPE Person
+    DECLARE name : STRING
+ENDTYPE
+
+DECLARE p : Person
+
+// ERROR: 'age' is not a declared field of Person
+age <- p.age

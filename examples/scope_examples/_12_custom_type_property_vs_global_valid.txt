@@ -1,0 +1,15 @@
+// Scope tests: property access must use composite type scope, not global
+// EXPECTED: valid
+
+DECLARE name : INTEGER
+name <- 999
+
+TYPE Person
+    DECLARE name : STRING
+ENDTYPE
+
+DECLARE p : Person
+p.name <- "Alice"
+
+// Should read the property (STRING), not the global INTEGER 'name'
+OUTPUT p.name

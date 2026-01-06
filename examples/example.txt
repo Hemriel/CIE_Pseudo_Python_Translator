@@ -49,6 +49,7 @@ PROCEDURE AppendEntryToFile(entry : CalcEntry)
     //
     // We write using multiple WRITEFILE calls to avoid needing STR().
 
+
     WRITEFILE HISTORY_FILE, entry.kind
     WRITEFILE HISTORY_FILE, SEP
     WRITEFILE HISTORY_FILE, entry.timestamp
@@ -247,7 +248,6 @@ PROCEDURE AddToHistory(history : ARRAY[0:99] OF CalcEntry, count : INTEGER, entr
     ENDIF
 
     history[count] <- entry
-    count <- count + 1
 ENDPROCEDURE
 
 
@@ -318,14 +318,13 @@ REPEAT
 
     DECLARE choice : STRING
     INPUT choice
-    choice <- LCASE(choice)
 
-    IF choice = "2" THEN
+    IF choice = 2 THEN
         // Show older entries from file + current in-memory entries.
         CALL ShowHistoryFromFile()
         CALL ShowInMemoryHistory(history, historyCount)
     ELSE
-        IF choice = "1" THEN
+        IF choice = 1 THEN
             // Read operator first, then decide what to ask for.
             OUTPUT "Enter operator:"
             OUTPUT "  Numeric: +  -  *  /  DIV  MOD  ^"
@@ -354,6 +353,11 @@ REPEAT
 
                 OUTPUT "Result: ", entry.resultBool
                 CALL AddToHistory(history, historyCount, entry)
+                IF historyCount = 100 THEN
+                    historyCount <- 91
+                ELSE
+                    historyCount <- historyCount + 1
+                ENDIF
 
             ELSE
                 IF op = "&" THEN
@@ -369,6 +373,11 @@ REPEAT
 
                     OUTPUT "Result: ", entry.resultStr
                     CALL AddToHistory(history, historyCount, entry)
+                    IF historyCount = 100 THEN
+                        historyCount <- 91
+                    ELSE
+                        historyCount <- historyCount + 1
+                    ENDIF
 
                 ELSE
                     // Numeric or comparison: use REAL inputs.
@@ -389,18 +398,28 @@ REPEAT
                         entry.resultBool <- EvalComparison(entry.num1, entry.op, entry.num2)
                         OUTPUT "Result: ", entry.resultBool
                         CALL AddToHistory(history, historyCount, entry)
+                        IF historyCount = 100 THEN
+                            historyCount <- 91
+                        ELSE
+                            historyCount <- historyCount + 1
+                        ENDIF
                     ELSE
                         entry.kind <- "NUM"
                         entry.resultNum <- EvalNumeric(entry.num1, entry.op, entry.num2)
                         OUTPUT "Result: ", entry.resultNum
                         CALL AddToHistory(history, historyCount, entry)
+                        IF historyCount = 100 THEN
+                            historyCount <- 91
+                        ELSE
+                            historyCount <- historyCount + 1
+                        ENDIF
                     ENDIF
                 ENDIF
             ENDIF
         ENDIF
     ENDIF
 
-UNTIL choice = "3"
+UNTIL choice = 3
 
 // Before exit: append everything still in memory to the file.
 DECLARE k : INTEGER

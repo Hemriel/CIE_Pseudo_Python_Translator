@@ -1,0 +1,14 @@
+// Scope tests: IF does NOT create a new local scope
+// EXPECTED: valid
+
+DECLARE x : INTEGER
+x <- 1
+
+IF TRUE THEN
+    // This is the same 'x' (no block scope)
+    x <- 2
+    OUTPUT "inside IF x=", x
+ENDIF
+
+// Still the same variable
+OUTPUT "after IF x=", x

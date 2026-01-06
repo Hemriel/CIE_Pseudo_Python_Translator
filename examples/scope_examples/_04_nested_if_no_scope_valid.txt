@@ -1,0 +1,21 @@
+// Scope tests: nested IF blocks do not create scopes
+// EXPECTED: valid
+
+DECLARE x : INTEGER
+x <- 10
+
+IF TRUE THEN
+    DECLARE y : INTEGER
+    y <- x + 1
+
+    IF TRUE THEN
+        // Same 'y' (no nested block scope)
+        y <- y + 1
+        OUTPUT "inner IF y=", y
+    ENDIF
+
+    OUTPUT "outer IF y=", y
+ENDIF
+
+// 'y' is still visible here because IF does not create a scope
+OUTPUT "after IF y=", y
