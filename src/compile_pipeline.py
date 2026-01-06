@@ -128,7 +128,8 @@ class PipelineSession:
     # ----- Parsing -----
 
     def begin_parsing(self, filename: str = "ui") -> None:
-        # IMPORTANT: parsing generator consumes token list.
+        # Parser advances via an internal cursor (does not mutate the list).
+        # We still pass a copy here to keep the UI token table logically immutable.
         self._parsing_generator = parser.get_parsing_reporter(self.tokens.copy(), filename=filename)
 
     def tick_parsing(self) -> tuple[bool, ParsingReport | None]:

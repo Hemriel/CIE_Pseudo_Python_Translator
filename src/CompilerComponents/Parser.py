@@ -16,10 +16,10 @@ class ParsingError(Exception):
 
 class _ParserState:
     def __init__(self, tokens: list[Token]):
-        # NOTE: tokens is expected to be a mutable working list.
+        # Tokens are treated as an immutable sequence; parsing advances via `cursor`.
         self.tokens = tokens
-        # Cursor is the index into the *original* token list (monotone increasing).
-        # This is what the UI token table uses.
+        # Cursor is the index into `tokens` (monotone increasing). This is what the
+        # UI token table uses.
         self.cursor = 0
 
         # AST tree event ids (UI-side). 0 is reserved for the Tree root.
@@ -153,10 +153,16 @@ def _new_report(
     return report
 
 
+def _current_token(state: _ParserState) -> Token | None:
+    if state.cursor < len(state.tokens):
+        return state.tokens[state.cursor]
+    return None
+
+
 def _peek_token(
     state: _ParserState, message: str = ""
 ) -> Generator[ParsingReport, None, Token | None]:
-    token = state.tokens[0] if state.tokens else None
+    token = _current_token(state)
     if state.emit_peek_reports:
         yield _new_report(
             state,
@@ -170,15 +176,14 @@ def _peek_token(
 def _advance_token(
     state: _ParserState, message: str = ""
 ) -> Generator[ParsingReport, None, Token | None]:
-    token = state.tokens[0] if state.tokens else None
+    token = _current_token(state)
     yield _new_report(
         state,
         message or "Consuming token",
         looked_up_token_number=state.cursor,
         looked_at_token=token,
     )
-    if state.tokens:
-        state.tokens.pop(0)
+    if token is not None:
         state.cursor += 1
     return token
 
@@ -240,7 +245,7 @@ def _emit_ast_node(
         state,
         message or f"AST: added {label}",
         looked_up_token_number=state.cursor,
-        looked_at_token=state.tokens[0] if state.tokens else None,
+        looked_at_token=_current_token(state),
         ast_parent_id=parent_id,
         ast_node_id=node_id,
         ast_node_label=label,
@@ -259,7 +264,7 @@ def _emit_ast_complete(
         state,
         message or "AST: completed node",
         looked_up_token_number=state.cursor,
-        looked_at_token=state.tokens[0] if state.tokens else None,
+        looked_at_token=_current_token(state),
         ast_node_id=node_id,
         ast_event="complete",
         ast_node_complete=True,
@@ -277,7 +282,7 @@ def _emit_ast_update(
         state,
         message or f"AST: updated {label}",
         looked_up_token_number=state.cursor,
-        looked_at_token=state.tokens[0] if state.tokens else None,
+        looked_at_token=_current_token(state),
         ast_node_id=node_id,
         ast_node_label=label,
         ast_event="update",
@@ -298,7 +303,7 @@ def _emit_ast_final_node(
         state,
         message or f"AST: added {label}",
         looked_up_token_number=state.cursor,
-        looked_at_token=state.tokens[0] if state.tokens else None,
+        looked_at_token=_current_token(state),
         ast_parent_id=parent_id,
         ast_node_id=node_id,
         ast_node_label=label,
@@ -1452,15 +1457,14 @@ def parse_statements(state: _ParserState):
     stmts_node_id = yield from _visual_begin(state, "global")
     try:
         statements = []
-        while state.tokens:
-            peeked_token = (
-                yield from _peek_token(state)
-            ) or Token(TokenType.END_OF_FILE, "END_OF_FILE", -1)
-            if peeked_token.type == TokenType.END_OF_FILE:
-                yield from _advance_token(
-                    state, "Consume END_OF_FILE"
-                )  # consume END_OF_FILE
+        while True:
+            peeked_token = yield from _peek_token(state)
+            if peeked_token is None:
                 break
+            if peeked_token.type == TokenType.END_OF_FILE:
+                yield from _advance_token(state, "Consume END_OF_FILE")
+                break
+
             stmt = yield from parse_statement(state)
             statements.append(stmt)
         return Statements(statements, title="global")
@@ -1477,8 +1481,8 @@ def get_parsing_reporter(
     The final AST root is returned as the generator return value (StopIteration.value).
 
     Notes:
-    - The parser consumes the provided token list.
-    - For UI usage, pass a copy of the token list so the original can remain displayed.
+    - The parser does not mutate the provided token list; it advances via an index cursor.
+    - For UI usage, you can still pass a copy so the UI can treat the token list as immutable.
     """
 
     filename = filename.replace(".txt", "")
