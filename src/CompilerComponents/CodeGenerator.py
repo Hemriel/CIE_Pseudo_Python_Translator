@@ -6,37 +6,6 @@ from pathlib import Path
 
 ### Generates code from the AST. ###
 
-
-def generate_code(ast_node, filename="temp"):
-    """Generate a Python source file from an AST node.
-
-    This legacy convenience wrapper writes `<name>.py` next to `filename` and
-    relies on the canonical `generate_code()` report pipeline.
-    """
-
-    if ast_node is None:
-        return False
-
-    filename_path = Path(str(filename))
-    output_dir = filename_path.parent
-    output_dir.mkdir(parents=True, exist_ok=True)
-
-    module_base_name = filename_path.name
-    output_py_path = output_dir / f"{module_base_name}.py"
-
-    code_parts: list[str] = []
-    for report in get_code_generation_reporter(
-        ast_node,
-        filename=str(module_base_name),
-        output_dir=output_dir,
-    ):
-        if report.new_code:
-            code_parts.append(report.new_code)
-
-    output_py_path.write_text("".join(code_parts), encoding="utf-8")
-
-    return True
-
 def get_code_generation_reporter(
     ast_node: ASTNode,
     filename="temp",

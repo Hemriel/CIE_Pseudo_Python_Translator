@@ -23,9 +23,6 @@ LITERAL_TYPES = {
     TokenType.DATE_LITERAL: "DATE",
 }
 
-# Backwards-compatible alias (typo kept for existing imports).
-LITTERAL_TYPES = LITERAL_TYPES
-
 class Token:
     """
     Class representing a token.

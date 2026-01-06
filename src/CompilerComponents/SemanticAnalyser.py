@@ -5,41 +5,6 @@ from collections.abc import Generator
 
 ### Semantic analysis of the parsed AST ###
 
-def semantic_analysis(ast_root, filename="temp") -> bool:
-    """Performs semantic analysis on the AST."""
-
-    filename = filename.replace(".txt", "")
-    symbol_table = SymbolTable()
-
-    first_pass_reporter = get_first_pass_reporter(ast_root, symbol_table)
-    report = FirstPassReport()
-    while True:
-        try:
-            report = next(first_pass_reporter)
-            if report.error:
-                print(f"Semantic analysis error: {report.error}")
-                return False
-        except StopIteration:
-            break
-
-    with open(f"{filename}_symbol_table_2.md", "w") as f:
-        f.write(symbol_table.to_markdown())
-    print(f"Symbol table after first pass written to {filename}_symbol_table_2.md")
-
-    second_pass_reporter = get_second_pass_reporter(ast_root, symbol_table, line=0)
-    report = SecondPassReport()
-    while True:
-        try:
-            report = next(second_pass_reporter)
-            if report.error:
-                print(f"Semantic analysis error: {report.error}")
-                return False
-        except StopIteration:
-            break
-    
-    print("Semantic analysis completed successfully. No semantic errors found.")
-    return True
-
 
 def get_first_pass_reporter(ast_node, sym_table: SymbolTable, current_scope="global") -> Generator[FirstPassReport, None, None]:
     """First pass semantic analysis: variable declarations.
