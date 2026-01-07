@@ -1,0 +1,6 @@
+// TEST: unterminated string literal
+// EXPECTED: invalid (one error)
+// FAILS IN: Lexing
+// REASON: missing closing quote for string literal
+
+OUTPUT "Hello

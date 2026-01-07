@@ -1,0 +1,7 @@
+// TEST: invalid number format (multiple decimal points)
+// EXPECTED: invalid (one error)
+// FAILS IN: Lexing
+// REASON: real literals may contain at most one '.'
+
+DECLARE r : REAL
+r <- 1.2.3

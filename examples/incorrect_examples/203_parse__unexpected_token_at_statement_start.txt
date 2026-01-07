@@ -1,0 +1,6 @@
+// TEST: unexpected token at statement start
+// EXPECTED: invalid (one error)
+// FAILS IN: Parsing
+// REASON: ENDIF cannot appear without a preceding IF
+
+ENDIF

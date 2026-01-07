@@ -1,0 +1,6 @@
+// TEST: variable declared with unknown type
+// EXPECTED: invalid (one error)
+// FAILS IN: Semantic (type existence)
+// REASON: type 'Person' is not declared via TYPE before use
+
+DECLARE p : Person

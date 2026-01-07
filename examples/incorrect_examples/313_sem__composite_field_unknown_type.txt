@@ -1,0 +1,8 @@
+// TEST: composite field uses unknown type
+// EXPECTED: invalid (one error)
+// FAILS IN: Semantic (composite field type existence)
+// REASON: field type 'Unknown' is not declared
+
+TYPE T
+    DECLARE f : Unknown
+ENDTYPE

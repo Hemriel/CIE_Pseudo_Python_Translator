@@ -10,8 +10,8 @@
 // - History is appended to file during flushing and also at program end.
 // ------------------------------------------------------------
 
-CONSTANT HISTORY_FILE <- "calculator_history.txt"
-CONSTANT SEP <- "|"
+CONSTANT HISTORY_FILE = "calculator_history.txt"
+CONSTANT SEP = "|"
 
 // A single history entry can represent numeric, boolean, or string calculations.
 // Fields not used for a given kind are left at their default values.

@@ -1,0 +1,17 @@
+// TEST: function-local variable used in global scope
+// EXPECTED: invalid (one error)
+// FAILS IN: Semantic (name lookup / scope)
+// REASON: 'z' is declared inside MakeZ, not globally
+
+FUNCTION MakeZ() RETURNS INTEGER
+    DECLARE z : INTEGER
+    z <- 42
+    RETURN z
+ENDFUNCTION
+
+DECLARE r : INTEGER
+r <- MakeZ()
+OUTPUT "r=", r
+
+// ERROR: 'z' not declared in global scope
+OUTPUT "z=", z

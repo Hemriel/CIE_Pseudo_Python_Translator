@@ -1,0 +1,114 @@
+{
+  "cases": {
+    "examples/incorrect_examples/100_lex__unexpected_character.txt": {
+      "expected_ok": false,
+      "message": "Line 7: Unexpected character '@'"
+    },
+    "examples/incorrect_examples/102_lex__unterminated_string_literal.txt": {
+      "expected_ok": false,
+      "message": "Line 6: Unterminated string literal"
+    },
+    "examples/incorrect_examples/103_lex__invalid_character_literal.txt": {
+      "expected_ok": false,
+      "message": "Line 7: Invalid character literal"
+    },
+    "examples/incorrect_examples/104_lex__invalid_date_format.txt": {
+      "expected_ok": false,
+      "message": "Line 7: Invalid date format"
+    },
+    "examples/incorrect_examples/105_lex__invalid_number_format_multiple_decimal.txt": {
+      "expected_ok": false,
+      "message": "Line 7: Invalid number format (multiple decimal points)."
+    },
+    "examples/incorrect_examples/200_parse__invalid_assignment_target_function_call.txt": {
+      "expected_ok": false,
+      "message": "Line 6: Invalid assignment target."
+    },
+    "examples/incorrect_examples/201_parse__chained_function_calls_not_supported.txt": {
+      "expected_ok": false,
+      "message": "Line 6: Chained function calls are not supported."
+    },
+    "examples/incorrect_examples/202_parse__missing_endif.txt": {
+      "expected_ok": false,
+      "message": "EOF: Unexpected end of input: Expected token ['ENDIF']"
+    },
+    "examples/incorrect_examples/203_parse__unexpected_token_at_statement_start.txt": {
+      "expected_ok": false,
+      "message": "Line 6: Unexpected token type: TokenType.STATEMENT_KEYWORDS : ENDIF"
+    },
+    "examples/incorrect_examples/204_parse__declare_missing_colon.txt": {
+      "expected_ok": false,
+      "message": "Line 6: Expected token COLON, but got ('INTEGER', 'INTEGER')"
+    },
+    "examples/incorrect_examples/205_parse__missing_rparen.txt": {
+      "expected_ok": false,
+      "message": "EOF: Unexpected end of input: Expected token ['RPAREN']"
+    },
+    "examples/incorrect_examples/206_parse__semicolon_token_not_supported.txt": {
+      "expected_ok": false,
+      "message": "Line 7: Unexpected token type: TokenType.STATEMENT_KEYWORDS : SEMICOLON"
+    },
+    "examples/incorrect_examples/300_sem__undeclared_variable_assignment.txt": {
+      "expected_ok": false,
+      "message": "Line 6: Semantic error: variable 'x' not declared before use."
+    },
+    "examples/incorrect_examples/301_sem__undeclared_variable_in_expression.txt": {
+      "expected_ok": false,
+      "message": "Line 10: Semantic error: no variable 'x' in current scope 'global'."
+    },
+    "examples/incorrect_examples/302_sem__double_declaration_same_scope.txt": {
+      "expected_ok": false,
+      "message": "Line 7: Double declaration: variable 'x' is already declared in the current scope."
+    },
+    "examples/incorrect_examples/303_sem__unknown_data_type_in_declare.txt": {
+      "expected_ok": false,
+      "message": "Line 6: Semantic error: data type 'Person' not declared before use."
+    },
+    "examples/incorrect_examples/304_sem__unknown_return_type_in_function.txt": {
+      "expected_ok": false,
+      "message": "Line 6: Semantic error: return type 'Person' not declared before use."
+    },
+    "examples/incorrect_examples/305_sem__call_to_undeclared_subprogram.txt": {
+      "expected_ok": false,
+      "message": "Line 7: Semantic error: function 'Foo' not declared before use."
+    },
+    "examples/incorrect_examples/306_sem__wrong_argument_count_function.txt": {
+      "expected_ok": false,
+      "message": "Line 11: Semantic error: function 'Inc' called with 2 arguments, but declared with 1 parameters."
+    },
+    "examples/incorrect_examples/307_sem__wrong_argument_count_procedure.txt": {
+      "expected_ok": false,
+      "message": "Line 10: Semantic error: function 'P' called with 2 arguments, but declared with 1 parameters."
+    },
+    "examples/incorrect_examples/308_sem__property_access_on_non_composite.txt": {
+      "expected_ok": false,
+      "message": "Line 7: Semantic error: composite type 'INTEGER' not declared before use."
+    },
+    "examples/incorrect_examples/309_sem__property_not_in_composite_assign.txt": {
+      "expected_ok": false,
+      "message": "Line 13: Semantic error: property 'age' not found in composite type 'Person'."
+    },
+    "examples/incorrect_examples/310_sem__property_not_in_composite_read.txt": {
+      "expected_ok": false,
+      "message": "Line 15: Semantic error: property 'age' not found in composite type 'Person'."
+    },
+    "examples/incorrect_examples/311_sem__constant_reassigned.txt": {
+      "expected_ok": false,
+      "message": "Line 7: Semantic error: cannot assign to constant 'c' (constants can only be assigned once)."
+    },
+    "examples/incorrect_examples/312_sem__constant_decl_requires_literal.txt": {
+      "expected_ok": false,
+      "message": "Line 9: Semantic error: constants must be assigned a literal value (use: CONSTANT c = <literal>)."
+    },
+    "examples/incorrect_examples/313_sem__composite_field_unknown_type.txt": {
+      "expected_ok": false,
+      "message": "Line 6: Semantic error: data type 'Unknown' not found in scope 'global'."
+    },
+    "examples/incorrect_examples/314_sem__scope_function_local_not_visible_globally.txt": {
+      "expected_ok": false,
+      "message": "Line 17: Semantic error: no variable 'z' in current scope 'global'."
+    }
+  },
+  "generated_at": "2026-01-07T07:26:22Z",
+  "schema_version": 1
+}

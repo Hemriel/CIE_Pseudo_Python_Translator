@@ -1,0 +1,15 @@
+// TEST: scope (property name vs global name)
+// EXPECTED: valid
+
+DECLARE name : INTEGER
+name <- 999
+
+TYPE Person
+    DECLARE name : STRING
+ENDTYPE
+
+DECLARE p : Person
+p.name <- "Alice"
+
+// Should read the property (STRING), not the global INTEGER 'name'
+OUTPUT p.name

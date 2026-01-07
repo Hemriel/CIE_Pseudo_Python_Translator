@@ -1,0 +1,6 @@
+// TEST: malformed DECLARE statement
+// EXPECTED: invalid (one error)
+// FAILS IN: Parsing
+// REASON: DECLARE syntax requires ':' before the type
+
+DECLARE x INTEGER

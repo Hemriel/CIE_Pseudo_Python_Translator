@@ -1,0 +1,31 @@
+// TEST: procedures (params, locals, calls with vars/literals/expressions)
+// EXPECTED: valid
+
+// Procedure with no parameters
+PROCEDURE SayHello()
+    OUTPUT "Hello from a procedure with no parameters."
+ENDPROCEDURE
+
+// Procedure with parameters (INTEGER)
+PROCEDURE PrintSum(a : INTEGER, b : INTEGER)
+    DECLARE total : INTEGER
+    total <- a + b
+    OUTPUT "Sum of ", a, " and ", b, " is ", total
+ENDPROCEDURE
+
+PROCEDURE GreetPerson(name : STRING, initial : CHAR)
+    OUTPUT "Hello ", name, " (", initial, ")."
+ENDPROCEDURE
+
+// Main program statements (calls are complete statements)
+CALL SayHello()
+
+DECLARE x, y : INTEGER
+x <- 5
+y <- 7
+CALL PrintSum(x, y)
+
+CALL PrintSum(10, 20 + 5)
+
+CALL GreetPerson("Alice", 'A')
+CALL GreetPerson("Bob", 'B')

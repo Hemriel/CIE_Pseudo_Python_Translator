@@ -1,0 +1,7 @@
+// TEST: semicolon token not supported
+// EXPECTED: invalid (one error)
+// FAILS IN: Parsing
+// REASON: lexer recognizes ';' but the parser does not accept it in statements
+
+DECLARE x : INTEGER
+x <- 1;

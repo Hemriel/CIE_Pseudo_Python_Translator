@@ -1,0 +1,6 @@
+// TEST: assignment to undeclared variable
+// EXPECTED: invalid (one error)
+// FAILS IN: Semantic (name lookup)
+// REASON: variable 'x' is used before DECLARE
+
+x <- 1

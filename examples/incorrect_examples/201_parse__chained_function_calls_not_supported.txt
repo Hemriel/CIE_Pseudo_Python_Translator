@@ -1,0 +1,6 @@
+// TEST: chained function calls
+// EXPECTED: invalid (one error)
+// FAILS IN: Parsing
+// REASON: chained calls like F()(1) are not supported
+
+OUTPUT F()(1)

@@ -1,0 +1,7 @@
+// TEST: invalid character literal
+// EXPECTED: invalid (one error)
+// FAILS IN: Lexing
+// REASON: character literal must be exactly one character like 'A'
+
+DECLARE c : CHAR
+c <- 'AB'

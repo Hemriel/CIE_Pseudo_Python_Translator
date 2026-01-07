@@ -80,7 +80,7 @@ def get_first_pass_reporter(ast_node, sym_table: SymbolTable, current_scope="glo
     elif isinstance(ast_node, AssignmentStatement) or isinstance(
         ast_node, InputStatement
     ):
-        # Treat `CONSTANT x <- <literal>` as a declaration.
+        # Treat `CONSTANT x = <literal>` as a declaration.
         if (
             isinstance(ast_node, AssignmentStatement)
             and getattr(ast_node, "is_constant_declaration", False)
@@ -91,7 +91,7 @@ def get_first_pass_reporter(ast_node, sym_table: SymbolTable, current_scope="glo
             if not isinstance(ast_node.expression, Literal):
                 report.looked_at_tree_node_id = ast_node.unique_id
                 report.error = SemanticError(
-                    f"Line {var_line}: Semantic error: constants must be assigned a literal value (use: CONSTANT {var_name} <- <literal>)."
+                    f"Line {var_line}: Semantic error: constants must be assigned a literal value (use: CONSTANT {var_name} = <literal>)."
                 )
                 yield report
                 return
@@ -660,7 +660,7 @@ def get_second_pass_reporter(ast_node, sym_table: SymbolTable, line: int, curren
                 yield report
                 return
 
-            # For `CONSTANT x <- <literal>` itself: accept it, and mark assigned.
+            # For `CONSTANT x = <literal>` itself: accept it, and mark assigned.
             if not isinstance(ast_node.expression, Literal):
                 report.error = SemanticError(
                     f"Line {ast_node.line}: Semantic error: constants must be assigned a literal value."

@@ -1,0 +1,9 @@
+// TEST: constant initializer must be a literal
+// EXPECTED: invalid (one error)
+// FAILS IN: Semantic (constant rules)
+// REASON: CONSTANT c = x uses a non-literal RHS
+
+DECLARE x : INTEGER
+x <- 5
+
+CONSTANT c = x

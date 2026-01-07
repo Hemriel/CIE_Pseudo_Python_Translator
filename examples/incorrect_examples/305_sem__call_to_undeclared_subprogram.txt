@@ -1,0 +1,7 @@
+// TEST: call to undeclared subprogram
+// EXPECTED: invalid (one error)
+// FAILS IN: Semantic (call lookup)
+// REASON: Foo is not declared
+
+DECLARE x : INTEGER
+x <- Foo(1)

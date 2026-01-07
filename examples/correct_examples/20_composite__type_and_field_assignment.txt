@@ -1,0 +1,12 @@
+// TEST: composite type declaration + field assignment
+// EXPECTED: valid
+
+TYPE Person
+    DECLARE Name : STRING
+    DECLARE Age : INTEGER
+ENDTYPE
+
+DECLARE p : Person
+
+p.Name <- "Alice"
+p.Age <- 17

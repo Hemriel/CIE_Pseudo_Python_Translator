@@ -1,0 +1,38 @@
+// TEST: CASE (with OTHERWISE and without)
+// EXPECTED: valid
+
+DECLARE choice : INTEGER
+DECLARE message : STRING
+
+OUTPUT "Enter a number (1..3): "
+INPUT choice
+
+CASE OF choice
+    1 :
+        message <- "You chose option 1"
+        OUTPUT message
+    2 :
+        message <- "You chose option 2"
+        OUTPUT message
+    3 :
+        message <- "You chose option 3"
+        OUTPUT message
+    OTHERWISE :
+        message <- "Invalid choice (not 1..3)"
+        OUTPUT message
+ENDCASE
+
+
+// A second CASE example (no OTHERWISE)
+DECLARE grade : CHAR
+OUTPUT "Enter grade (A/B/C): "
+INPUT grade
+
+CASE OF grade
+    'A' :
+        OUTPUT "Excellent"
+    'B' :
+        OUTPUT "Good"
+    'C' :
+        OUTPUT "Pass"
+ENDCASE

@@ -1,0 +1,9 @@
+// TEST: declarations (all primitive types + multi-declare)
+// EXPECTED: valid
+
+DECLARE a : INTEGER
+DECLARE b1, b2 : REAL
+DECLARE c : CHAR
+DECLARE d1, d2 : STRING
+DECLARE e : BOOLEAN
+DECLARE f1, f2 : DATE

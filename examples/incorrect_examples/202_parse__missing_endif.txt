@@ -1,0 +1,7 @@
+// TEST: missing ENDIF
+// EXPECTED: invalid (one error)
+// FAILS IN: Parsing
+// REASON: IF statement must be closed with ENDIF
+
+IF TRUE THEN
+    OUTPUT "ok"

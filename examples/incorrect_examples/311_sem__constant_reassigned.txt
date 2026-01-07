@@ -1,0 +1,7 @@
+// TEST: constant reassignment
+// EXPECTED: invalid (one error)
+// FAILS IN: Semantic (constant rules)
+// REASON: constants can only be assigned once
+
+CONSTANT c = 1
+c <- 2

@@ -1,4 +1,0 @@
-// working example of array declarations
-
-DECLARE nums : ARRAY [1:10] OF INTEGER
-DECLARE matrix, grid : ARRAY [0:4, 1:3] OF REAL

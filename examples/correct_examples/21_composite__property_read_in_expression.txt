@@ -1,0 +1,14 @@
+// TEST: property read used inside expressions
+// EXPECTED: valid
+
+TYPE Person
+    DECLARE Age : INTEGER
+ENDTYPE
+
+DECLARE p : Person
+p.Age <- 40
+
+DECLARE nextAge : INTEGER
+nextAge <- p.Age + 1
+
+OUTPUT "nextAge=", nextAge

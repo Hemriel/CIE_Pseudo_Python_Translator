@@ -1,0 +1,9 @@
+// TEST: constants and literal forms (int/real/char/string/bool/date)
+// EXPECTED: valid
+
+CONSTANT a = 6
+CONSTANT b = 2.03
+CONSTANT c = 'h'
+CONSTANT d = "test"
+CONSTANT e = TRUE
+CONSTANT f = 22/02/2022

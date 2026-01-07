@@ -1,0 +1,13 @@
+// TEST: numeric built-ins (INT, RAND)
+// EXPECTED: valid
+
+DECLARE x : REAL
+DECLARE i : INTEGER
+DECLARE r : REAL
+
+x <- 27.5415
+i <- INT(x)
+OUTPUT "INT(", x, ") = ", i
+
+r <- RAND(87)
+OUTPUT "RAND(87) = ", r

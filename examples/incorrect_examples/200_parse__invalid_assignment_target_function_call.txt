@@ -1,0 +1,6 @@
+// TEST: invalid assignment target
+// EXPECTED: invalid (one error)
+// FAILS IN: Parsing
+// REASON: left-hand side of '<-' must be a variable / array access / property access, not a function call
+
+F(1) <- 2

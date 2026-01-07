@@ -1,0 +1,8 @@
+// TEST: function returns unknown type
+// EXPECTED: invalid (one error)
+// FAILS IN: Semantic (return type existence)
+// REASON: return type 'Person' is not declared via TYPE
+
+FUNCTION F() RETURNS Person
+    RETURN 1
+ENDFUNCTION

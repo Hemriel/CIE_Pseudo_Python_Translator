@@ -801,6 +801,38 @@ def parse_assignment(state: _ParserState):
         yield from _visual_end(state, assign_node_id)
 
 
+def parse_constant_declaration(state: _ParserState):
+    """Parse a constant declaration.
+
+    Grammar (CIE):
+        CONSTANT <identifier> = <expression>
+
+    Notes:
+    - This produces an AssignmentStatement with `is_constant_declaration=True`.
+    - Variable assignment elsewhere remains `<-` (ASSIGN).
+    """
+
+    node_id = yield from _visual_begin(state, "Assignment")
+    try:
+        const_token = yield from _expect_token(state, ["CONSTANT"])
+        ident_token = yield from _expect_token(state, [TokenType.IDENTIFIER])
+        variable = Variable(ident_token.value, ident_token.line_number)
+        yield from _emit_ast_subtree(state, variable, node_id)
+
+        # In constant declarations, `=` is used (tokenized as OPERATOR value "EQ").
+        yield from _expect_token(state, ["EQ"])
+
+        expr = yield from parse_expression(state)
+        return AssignmentStatement(
+            variable,
+            expr,
+            const_token.line_number,
+            is_constant_declaration=True,
+        )
+    finally:
+        yield from _visual_end(state, node_id)
+
+
 def parse_input_statement(state: _ParserState):
     """Parse an input statement."""
     node_id = yield from _visual_begin(state, "Input Statement")
@@ -1437,23 +1469,11 @@ def parse_statement(state: _ParserState):
     if not next_token:
         raise ParsingError("EOF: Unexpected end of input while parsing statement.")
 
-    # Support two CONSTANT forms:
-    # - Typed declaration: CONSTANT x : INTEGER
-    # - Assignment-style constant: CONSTANT x <- 123
+    # CIE constant declaration form:
+    #   CONSTANT <identifier> = <value>
+    # Variable assignment elsewhere remains `<-`.
     if next_token.value == "CONSTANT":
-        if (
-            len(state.tokens) >= 3
-            and state.tokens[1].type == TokenType.IDENTIFIER
-            and state.tokens[2].value == "ASSIGN"
-        ):
-            yield from _advance_token(state, "Consume CONSTANT")
-            assignment = (yield from parse_assignment(state))
-            if isinstance(assignment, AssignmentStatement):
-                assignment.is_constant_declaration = True
-            return assignment
-
-        # Fall back to typed declaration form.
-        return (yield from parse_declare_statement(state))
+        return (yield from parse_constant_declaration(state))
 
     if next_token.value == "DECLARE":
         return (yield from parse_declare_statement(state))

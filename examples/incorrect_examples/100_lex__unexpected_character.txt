@@ -1,0 +1,7 @@
+// TEST: unexpected character
+// EXPECTED: invalid (one error)
+// FAILS IN: Lexing
+// REASON: '@' is not a valid token character
+
+DECLARE x : INTEGER
+x <- 1 @ 2

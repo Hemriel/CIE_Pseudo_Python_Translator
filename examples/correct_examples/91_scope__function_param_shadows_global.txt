@@ -1,0 +1,16 @@
+// TEST: scope (function params shadow globals)
+// EXPECTED: valid
+
+DECLARE x : INTEGER
+x <- 5
+
+FUNCTION UseX(x : INTEGER) RETURNS INTEGER
+    // 'x' here should refer to the parameter, not the global
+    RETURN x + 1
+ENDFUNCTION
+
+DECLARE y : INTEGER
+y <- UseX(100)
+
+OUTPUT "y=", y
+OUTPUT "global x=", x

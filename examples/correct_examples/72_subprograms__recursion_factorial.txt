@@ -1,0 +1,14 @@
+// TEST: recursion in functions
+// EXPECTED: valid
+
+FUNCTION Factorial(n : INTEGER) RETURNS INTEGER
+    IF n <= 1 THEN
+        RETURN 1
+    ELSE
+        RETURN n * Factorial(n - 1)
+    ENDIF
+ENDFUNCTION
+
+DECLARE f5 : INTEGER
+f5 <- Factorial(5)
+OUTPUT "Factorial(5)=", f5

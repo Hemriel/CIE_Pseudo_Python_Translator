@@ -1,0 +1,14 @@
+// TEST: REPEAT/UNTIL (post-condition loop)
+// EXPECTED: valid
+
+DECLARE counter : INTEGER
+DECLARE limit : INTEGER
+
+counter <- 0
+OUTPUT "Enter a positive limit (>= 1): "
+INPUT limit
+
+REPEAT
+    counter <- counter + 1
+    OUTPUT "Counter is now: ", counter
+UNTIL counter >= limit

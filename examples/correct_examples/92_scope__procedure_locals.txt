@@ -1,0 +1,14 @@
+// TEST: scope (procedure locals)
+// EXPECTED: valid
+
+DECLARE g : INTEGER
+g <- 1
+
+PROCEDURE P()
+    DECLARE g : INTEGER
+    g <- 2
+    OUTPUT "inside P g=", g
+ENDPROCEDURE
+
+CALL P()
+OUTPUT "global g=", g

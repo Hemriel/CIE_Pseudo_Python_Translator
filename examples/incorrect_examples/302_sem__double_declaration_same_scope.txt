@@ -1,0 +1,7 @@
+// TEST: double declaration in the same scope
+// EXPECTED: invalid (one error)
+// FAILS IN: Semantic (symbol table)
+// REASON: 'x' is declared twice in scope global
+
+DECLARE x : INTEGER
+DECLARE x : INTEGER

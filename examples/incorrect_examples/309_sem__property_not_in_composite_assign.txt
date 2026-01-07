@@ -1,0 +1,13 @@
+// TEST: property assignment to unknown field
+// EXPECTED: invalid (one error)
+// FAILS IN: Semantic (property access validation)
+// REASON: property 'age' is not declared on type Person
+
+TYPE Person
+    DECLARE name : STRING
+ENDTYPE
+
+DECLARE p : Person
+
+// ERROR: 'age' is not a declared field of Person
+p.age <- 10

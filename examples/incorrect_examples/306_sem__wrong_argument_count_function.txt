@@ -1,0 +1,11 @@
+// TEST: wrong number of arguments to a function
+// EXPECTED: invalid (one error)
+// FAILS IN: Semantic (call arity)
+// REASON: Inc expects 1 argument but is called with 2
+
+FUNCTION Inc(a : INTEGER) RETURNS INTEGER
+    RETURN a + 1
+ENDFUNCTION
+
+DECLARE x : INTEGER
+x <- Inc(1, 2)

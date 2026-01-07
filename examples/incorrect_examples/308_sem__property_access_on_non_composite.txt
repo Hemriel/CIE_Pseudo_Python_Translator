@@ -1,0 +1,7 @@
+// TEST: property access on a non-composite value
+// EXPECTED: invalid (one error)
+// FAILS IN: Semantic (property access validation)
+// REASON: x is INTEGER, so x.Age is invalid
+
+DECLARE x : INTEGER
+OUTPUT x.Age

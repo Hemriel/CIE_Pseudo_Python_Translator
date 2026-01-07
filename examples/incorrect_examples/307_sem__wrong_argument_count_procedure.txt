@@ -1,0 +1,10 @@
+// TEST: wrong number of arguments to a procedure
+// EXPECTED: invalid (one error)
+// FAILS IN: Semantic (call arity)
+// REASON: P expects 1 argument but is called with 2
+
+PROCEDURE P(a : INTEGER)
+    OUTPUT a
+ENDPROCEDURE
+
+CALL P(1, 2)

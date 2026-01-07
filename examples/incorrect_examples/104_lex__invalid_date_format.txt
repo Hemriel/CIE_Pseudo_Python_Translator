@@ -1,0 +1,7 @@
+// TEST: invalid date literal
+// EXPECTED: invalid (one error)
+// FAILS IN: Lexing
+// REASON: date format must be strict DD/MM/YYYY
+
+DECLARE d : DATE
+d <- 1/01/2020

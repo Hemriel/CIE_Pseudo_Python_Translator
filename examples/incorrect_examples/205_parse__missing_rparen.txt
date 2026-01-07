@@ -1,0 +1,6 @@
+// TEST: missing ')'
+// EXPECTED: invalid (one error)
+// FAILS IN: Parsing
+// REASON: parenthesized expressions must have a closing ')'
+
+OUTPUT (1 + 2

@@ -1,0 +1,13 @@
+// TEST: array indexing (1D + 2D) + whole-array assignment
+// EXPECTED: valid
+
+DECLARE nums : ARRAY [1:10] OF INTEGER
+DECLARE matrix, grid : ARRAY [0:4, 1:3] OF REAL
+
+nums[2] <- 5
+nums[1] <- nums[2]
+
+matrix[4,3] <- 0.01
+grid[0,1] <- matrix[4,3]
+
+matrix <- grid

@@ -1,0 +1,11 @@
+// TEST: scope (basic global usage)
+// EXPECTED: valid
+
+DECLARE x : INTEGER
+x <- 10
+
+DECLARE y : INTEGER
+y <- x + 5
+
+OUTPUT "x=", x
+OUTPUT "y=", y

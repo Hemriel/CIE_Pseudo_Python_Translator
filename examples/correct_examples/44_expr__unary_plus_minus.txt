@@ -1,0 +1,16 @@
+// TEST: unary + and - operators
+// EXPECTED: valid
+
+DECLARE x, y : INTEGER
+DECLARE z : REAL
+
+x <- 5
+y <- -x
+z <- -2.5
+
+OUTPUT "x=", x
+OUTPUT "y=-x=", y
+OUTPUT "z=-2.5=", z
+OUTPUT "+x=", +x
+OUTPUT "-(x+3)=", -(x + 3)
+OUTPUT "-(-x)=", -(-x)

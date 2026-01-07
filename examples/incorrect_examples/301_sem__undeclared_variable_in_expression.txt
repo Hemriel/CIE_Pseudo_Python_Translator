@@ -1,0 +1,10 @@
+// TEST: undeclared variable used in an expression
+// EXPECTED: invalid (one error)
+// FAILS IN: Semantic (name lookup)
+// REASON: variable 'x' is referenced but never declared
+
+DECLARE a : INTEGER
+DECLARE b : INTEGER
+
+a <- 1
+b <- a + x
