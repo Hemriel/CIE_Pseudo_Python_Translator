@@ -1,0 +1,20 @@
+// TEST: type rules (CALL must target procedures; expressions must use functions)
+// EXPECTED: valid
+// COVERS:
+// - CALL is for procedures
+// - functions return a value and can be used in expressions
+
+DECLARE x : INTEGER
+
+FUNCTION AddOne(n : INTEGER) RETURNS INTEGER
+    RETURN n + 1
+ENDFUNCTION
+
+PROCEDURE Show(n : INTEGER)
+    OUTPUT "Show: ", n
+ENDPROCEDURE
+
+x <- AddOne(4)
+OUTPUT "x = ", x
+
+CALL Show(x)

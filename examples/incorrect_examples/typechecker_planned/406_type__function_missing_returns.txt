@@ -1,0 +1,8 @@
+// TEST: semantic/type error (FUNCTION must declare RETURNS <type>)
+// EXPECTED: invalid (first pass per plan)
+// PENDING: kept under typechecker_planned until enforcement is active
+
+FUNCTION NoReturnType()
+    // Even though it returns a value, the declaration is missing RETURNS <type>
+    RETURN 1
+ENDFUNCTION

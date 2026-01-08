@@ -1,0 +1,9 @@
+// TEST: type error (READFILE target must be STRING)
+// EXPECTED: invalid (type checker)
+// PENDING: kept under typechecker_planned until type checker is enforced
+
+DECLARE n : INTEGER
+
+OPENFILE "t.txt" FOR READ
+READFILE "t.txt", n
+CLOSEFILE "t.txt"

@@ -1,0 +1,12 @@
+// TEST: type error (array indices must be INTEGER)
+// EXPECTED: invalid (type checker)
+// PENDING: kept under typechecker_planned until type checker is enforced
+
+DECLARE a : ARRAY[INTEGER]
+DECLARE i : REAL
+DECLARE x : INTEGER
+
+i <- 1.5
+
+x <- a[i]
+OUTPUT x

@@ -1,0 +1,10 @@
+// TEST: type error (REAL cannot be assigned to INTEGER)
+// EXPECTED: invalid (type checker)
+// PENDING: kept under typechecker_planned until type checker is enforced
+
+DECLARE i : INTEGER
+DECLARE r : REAL
+
+r <- 3.14
+
+i <- r

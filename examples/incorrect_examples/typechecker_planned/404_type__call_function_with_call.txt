@@ -1,0 +1,9 @@
+// TEST: type error (CALL must target a PROCEDURE, not a FUNCTION)
+// EXPECTED: invalid (type checker)
+// PENDING: kept under typechecker_planned until type checker is enforced
+
+FUNCTION AddOne(n : INTEGER) RETURNS INTEGER
+    RETURN n + 1
+ENDFUNCTION
+
+CALL AddOne(5)

@@ -1,0 +1,18 @@
+// TEST: type rules (DATE assign + DATE comparisons only)
+// EXPECTED: valid
+// COVERS:
+// - DATE variables can be assigned from DATE literals and other DATE variables
+// - DATE values can be compared to other DATE values
+
+DECLARE d1, d2 : DATE
+DECLARE earlier : BOOLEAN
+
+d1 <- 25/12/2025
+d2 <- 01/01/2026
+
+earlier <- d1 < d2
+OUTPUT "d1 < d2 = ", earlier
+
+// DATE := DATE is allowed
+d2 <- d1
+OUTPUT "d2 = ", d2

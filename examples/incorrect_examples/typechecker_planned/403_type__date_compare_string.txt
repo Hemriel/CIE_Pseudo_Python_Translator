@@ -1,0 +1,13 @@
+// TEST: type error (DATE comparisons only allowed against DATE)
+// EXPECTED: invalid (type checker)
+// PENDING: kept under typechecker_planned until type checker is enforced
+
+DECLARE d : DATE
+DECLARE s : STRING
+DECLARE b : BOOLEAN
+
+d <- 25/12/2025
+s <- "25/12/2025"
+
+b <- d = s
+OUTPUT b

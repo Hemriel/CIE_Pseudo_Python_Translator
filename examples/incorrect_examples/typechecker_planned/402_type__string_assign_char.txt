@@ -1,0 +1,10 @@
+// TEST: type error (CHAR cannot be assigned to STRING; only '&' concatenation is compatible)
+// EXPECTED: invalid (type checker)
+// PENDING: kept under typechecker_planned until type checker is enforced
+
+DECLARE s : STRING
+DECLARE c : CHAR
+
+c <- 'A'
+
+s <- c

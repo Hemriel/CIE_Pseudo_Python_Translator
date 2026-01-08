@@ -1,0 +1,25 @@
+// TEST: type rules (numeric promotion + division result types)
+// EXPECTED: valid
+// COVERS:
+// - INTEGER -> REAL assignment allowed
+// - '/' produces REAL
+// - 'DIV' produces INTEGER
+
+DECLARE i : INTEGER
+DECLARE r1, r2 : REAL
+DECLARE q : INTEGER
+
+i <- 5
+
+// INTEGER -> REAL promotion is allowed
+r1 <- i
+
+// '/' is real division
+r2 <- 5 / 2
+
+// 'DIV' is integer quotient
+q <- 5 DIV 2
+
+OUTPUT "r1 = ", r1
+OUTPUT "r2 = ", r2
+OUTPUT "q = ", q

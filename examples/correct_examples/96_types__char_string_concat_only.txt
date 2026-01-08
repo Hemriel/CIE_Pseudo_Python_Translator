@@ -1,0 +1,16 @@
+// TEST: type rules (CHAR vs STRING strictness + concatenation)
+// EXPECTED: valid
+// COVERS:
+// - CHAR and STRING are distinct
+// - '&' concatenation accepts CHAR/STRING operands and produces STRING
+
+DECLARE s : STRING
+DECLARE c : CHAR
+
+c <- 'Z'
+
+// Allowed: concatenation produces a STRING
+s <- "Hello" & c
+OUTPUT s
+s <- c & "Hello"
+OUTPUT s

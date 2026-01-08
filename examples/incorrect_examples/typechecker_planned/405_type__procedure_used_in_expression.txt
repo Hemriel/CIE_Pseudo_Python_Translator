@@ -1,0 +1,12 @@
+// TEST: type error (procedure cannot be used in an expression)
+// EXPECTED: invalid (type checker)
+// PENDING: kept under typechecker_planned until type checker is enforced
+
+DECLARE x : INTEGER
+
+PROCEDURE P()
+    OUTPUT "hi"
+ENDPROCEDURE
+
+x <- P()
+OUTPUT x

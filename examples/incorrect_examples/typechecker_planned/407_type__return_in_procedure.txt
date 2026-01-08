@@ -1,0 +1,7 @@
+// TEST: type error (procedures cannot contain RETURN statements)
+// EXPECTED: invalid (type checker)
+// PENDING: kept under typechecker_planned until type checker is enforced
+
+PROCEDURE Bad()
+    RETURN 5
+ENDPROCEDURE
