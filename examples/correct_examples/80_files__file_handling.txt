@@ -22,7 +22,7 @@ CLOSEFILE fileName
 // READ mode: read lines until EOF
 OPENFILE fileName FOR READ
 WHILE NOT EOF(fileName)
-    READFILE fileName INTO line
+    READFILE fileName, line
     OUTPUT line
 ENDWHILE
 CLOSEFILE fileName
@@ -39,7 +39,7 @@ CLOSEFILE "notes.txt"
 
 OPENFILE "notes.txt" FOR READ
 WHILE NOT EOF("notes.txt")
-    READFILE "notes.txt" INTO txt
+    READFILE "notes.txt", txt
     OUTPUT "Read: " & txt
 ENDWHILE
 CLOSEFILE "notes.txt"

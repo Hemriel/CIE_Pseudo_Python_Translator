@@ -26,7 +26,7 @@ def get_code_generation_reporter(
     output_dir.mkdir(parents=True, exist_ok=True)
 
     module_base_name = Path(str(filename)).name
-    header_module_name = f"{module_base_name}_header"
+    header_module_name = f"header_{module_base_name}"
 
     report = CodeGenerationReport()
     report.action_bar_message = "Starting code generation: writing header import."
@@ -38,7 +38,7 @@ def get_code_generation_reporter(
     with header_path.open("r", encoding="utf-8") as header_file:
         HEADER = header_file.read()
 
-    header_output_path = output_dir / f"{module_base_name}_header.py"
+    header_output_path = output_dir / f"header_{module_base_name}.py"
     with header_output_path.open("w", encoding="utf-8") as header_out:
         header_out.write(HEADER)
 

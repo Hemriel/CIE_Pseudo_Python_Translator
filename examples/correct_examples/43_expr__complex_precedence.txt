@@ -7,8 +7,8 @@ a <- 7
 b <- 3
 OUTPUT "a = ", a, ", b = ", b
 
-c <- (a + b) * (a - b) + a ^ 2
-OUTPUT "c = (a + b) * (a - b) + a ^ 2 => ", c
+c <- (a + b) * (a - b) + a * a
+OUTPUT "c = (a + b) * (a - b) + a * a => ", c
 
 // Mixed arithmetic + comparison
 DECLARE x, y : REAL

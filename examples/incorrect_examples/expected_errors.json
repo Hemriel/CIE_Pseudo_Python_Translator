@@ -4,6 +4,10 @@
       "expected_ok": false,
       "message": "Line 7: Unexpected character '@'"
     },
+    "examples/incorrect_examples/101_lex__caret_not_supported.txt": {
+      "expected_ok": false,
+      "message": "Line 11: Unexpected character '^'"
+    },
     "examples/incorrect_examples/102_lex__unterminated_string_literal.txt": {
       "expected_ok": false,
       "message": "Line 6: Unterminated string literal"
@@ -62,23 +66,23 @@
     },
     "examples/incorrect_examples/303_sem__unknown_data_type_in_declare.txt": {
       "expected_ok": false,
-      "message": "Line 6: Semantic error: data type 'Person' not declared before use."
+      "message": "Line 6: Semantic error: data type 'person' not declared before use."
     },
     "examples/incorrect_examples/304_sem__unknown_return_type_in_function.txt": {
       "expected_ok": false,
-      "message": "Line 6: Semantic error: return type 'Person' not declared before use."
+      "message": "Line 6: Semantic error: return type 'person' not declared before use."
     },
     "examples/incorrect_examples/305_sem__call_to_undeclared_subprogram.txt": {
       "expected_ok": false,
-      "message": "Line 7: Semantic error: function 'Foo' not declared before use."
+      "message": "Line 7: Semantic error: function 'foo' not declared before use."
     },
     "examples/incorrect_examples/306_sem__wrong_argument_count_function.txt": {
       "expected_ok": false,
-      "message": "Line 11: Semantic error: function 'Inc' called with 2 arguments, but declared with 1 parameters."
+      "message": "Line 11: Semantic error: function 'inc' called with 2 arguments, but declared with 1 parameters."
     },
     "examples/incorrect_examples/307_sem__wrong_argument_count_procedure.txt": {
       "expected_ok": false,
-      "message": "Line 10: Semantic error: function 'P' called with 2 arguments, but declared with 1 parameters."
+      "message": "Line 10: Semantic error: function 'p' called with 2 arguments, but declared with 1 parameters."
     },
     "examples/incorrect_examples/308_sem__property_access_on_non_composite.txt": {
       "expected_ok": false,
@@ -86,11 +90,11 @@
     },
     "examples/incorrect_examples/309_sem__property_not_in_composite_assign.txt": {
       "expected_ok": false,
-      "message": "Line 13: Semantic error: property 'age' not found in composite type 'Person'."
+      "message": "Line 13: Semantic error: property 'age' not found in composite type 'person'."
     },
     "examples/incorrect_examples/310_sem__property_not_in_composite_read.txt": {
       "expected_ok": false,
-      "message": "Line 15: Semantic error: property 'age' not found in composite type 'Person'."
+      "message": "Line 15: Semantic error: property 'age' not found in composite type 'person'."
     },
     "examples/incorrect_examples/311_sem__constant_reassigned.txt": {
       "expected_ok": false,
@@ -102,13 +106,17 @@
     },
     "examples/incorrect_examples/313_sem__composite_field_unknown_type.txt": {
       "expected_ok": false,
-      "message": "Line 6: Semantic error: data type 'Unknown' not found in scope 'global'."
+      "message": "Line 6: Semantic error: data type 'unknown' not found in scope 'global'."
     },
     "examples/incorrect_examples/314_sem__scope_function_local_not_visible_globally.txt": {
       "expected_ok": false,
       "message": "Line 17: Semantic error: no variable 'z' in current scope 'global'."
+    },
+    "examples/incorrect_examples/315_sem__double_declaration_case_insensitive.txt": {
+      "expected_ok": false,
+      "message": "Line 7: Double declaration: variable 'x' is already declared in the current scope."
     }
   },
-  "generated_at": "2026-01-07T07:26:22Z",
+  "generated_at": "2026-01-08T05:24:19Z",
   "schema_version": 1
 }

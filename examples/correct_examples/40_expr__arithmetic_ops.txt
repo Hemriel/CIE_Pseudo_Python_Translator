@@ -1,7 +1,7 @@
-// TEST: arithmetic operators (+ - * / ^ DIV MOD)
+// TEST: arithmetic operators (+ - * / DIV MOD)
 // EXPECTED: valid
 
-DECLARE a, b, sum, diff, prod, power, quotient, intQuot, remainder : INTEGER
+DECLARE a, b, sum, diff, prod, quotient, intQuot, remainder : INTEGER
 DECLARE realQuotient : REAL
 
 a <- 17
@@ -18,10 +18,6 @@ OUTPUT "Subtraction (", a, " - ", b, ") = ", diff
 // * Multiplication
 prod <- a * b
 OUTPUT "Multiplication (", a, " * ", b, ") = ", prod
-
-// ^ Power
-power <- a ^ b
-OUTPUT "Power (", a, " ^ ", b, ") = ", power
 
 // / Division (result should be REAL)
 realQuotient <- a / b

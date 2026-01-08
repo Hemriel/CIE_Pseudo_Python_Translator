@@ -559,10 +559,10 @@ class OneArrayDeclaration(Statement):
 
     Methods:
         generate_code(indent: str = "") -> Generator[CodeGenerationReport, None, None]:
-            Emits Python tuple-based array initialization preserving lower bound.
+            Emits Python `CIEArray(...)` initialization preserving bounds.
 
     Notes:
-        Arrays are compiled as tuples like `(lower_bound, backing_list)`.
+        Arrays are compiled using the runtime helper `CIEArray`.
     """
 
     def __init__(
@@ -598,35 +598,25 @@ class OneArrayDeclaration(Statement):
             indent (str): Leading indentation for the statement.
 
         Yields:
-            CodeGenerationReport: Events that build the tuple-based array initialization.
+            CodeGenerationReport: Events that build the `CIEArray(...)` initialization.
         """
         for variable in self.variable:
             report = CodeGenerationReport()
             report.action_bar_message = f"Generating code for 1D array declaration: {variable.name}"
             report.looked_at_tree_node_id = self.unique_id
-            report.new_code = f"{indent}{variable.name} = ("
+            report.new_code = f"{indent}{variable.name} = CIEArray("
             yield report
             yield from self.bounds.lower_bound.generate_code()
             report = CodeGenerationReport()
-            report.action_bar_message = f"Generating code for 1D array declaration: {variable.name} (creating size block)"
+            report.action_bar_message = f"Generating code for 1D array declaration: {variable.name} (upper bound)"
             report.looked_at_tree_node_id = self.unique_id
-            report.new_code = f", [{default_value_for_type(self.var_type)}] * ("
-            yield report
-            report = CodeGenerationReport()
-            report.action_bar_message = f"Generating code for 1D array declaration: {variable.name} (size calculation)"
-            report.looked_at_tree_node_id = self.unique_id
+            report.new_code = ", "
             yield report
             yield from self.bounds.upper_bound.generate_code()
             report = CodeGenerationReport()
-            report.action_bar_message = f"Generating code for 1D array declaration: {variable.name} (size block continued)"
+            report.action_bar_message = f"Generating code for 1D array declaration: {variable.name} (default value)"
             report.looked_at_tree_node_id = self.unique_id
-            report.new_code = " - "
-            yield report
-            yield from self.bounds.lower_bound.generate_code()
-            report = CodeGenerationReport()
-            report.action_bar_message = f"Generating code for 1D array declaration: {variable.name} (finalizing size block)"
-            report.looked_at_tree_node_id = self.unique_id
-            report.new_code = " + 1))\n"
+            report.new_code = f", {default_value_for_type(self.var_type)})\n"
             yield report
 
     def __repr__(self):
@@ -648,10 +638,10 @@ class TwoArrayDeclaration(Statement):
 
     Methods:
         generate_code(indent: str = "") -> Generator[CodeGenerationReport, None, None]:
-            Emits Python tuple-based 2D array initialization preserving both lower bounds.
+            Emits Python `CIEArray(...)` initialization preserving bounds.
 
     Notes:
-        2D arrays are compiled as tuples like `(low1, low2, backing_matrix)`.
+        2D arrays are compiled using the runtime helper `CIEArray`.
     """
 
     def __init__(
@@ -690,54 +680,42 @@ class TwoArrayDeclaration(Statement):
             indent (str): Leading indentation for the statement.
 
         Yields:
-            CodeGenerationReport: Events that build the tuple-based 2D array initialization.
+            CodeGenerationReport: Events that build the `CIEArray(...)` initialization.
         """
         for variable in self.variable:
             report = CodeGenerationReport()
             report.action_bar_message = f"Generating code for 2D array declaration: {variable.name}"
             report.looked_at_tree_node_id = self.unique_id
-            report.new_code = f"{indent}{variable.name} = ("
+            report.new_code = f"{indent}{variable.name} = CIEArray("
             yield report
+            # CIEArray(low1, high1, default, low2, high2)
             yield from self.bounds1.lower_bound.generate_code()
             report = CodeGenerationReport()
-            report.action_bar_message = f"Generating code for 2D array declaration: {variable.name} (second bound)"
+            report.action_bar_message = f"Generating code for 2D array declaration: {variable.name} (high1)"
             report.looked_at_tree_node_id = self.unique_id
             report.new_code = ", "
             yield report
-            yield from self.bounds2.lower_bound.generate_code()
+            yield from self.bounds1.upper_bound.generate_code()
             report = CodeGenerationReport()
-            report.action_bar_message = f"Generating code for 2D array declaration: {variable.name} (creating size block)"
+            report.action_bar_message = f"Generating code for 2D array declaration: {variable.name} (default value)"
             report.looked_at_tree_node_id = self.unique_id
-            report.new_code = ", [["
+            report.new_code = f", {default_value_for_type(self.var_type)}, "
             yield report
             report = CodeGenerationReport()
-            report.action_bar_message = f"Generating code for 2D array declaration: {variable.name} (size calculation for second dimension)"
+            report.action_bar_message = f"Generating code for 2D array declaration: {variable.name} (low2)"
             report.looked_at_tree_node_id = self.unique_id
-            report.new_code = f"{default_value_for_type(self.var_type)}] * ("
-            yield report
-            yield from self.bounds2.upper_bound.generate_code()
-            report = CodeGenerationReport()
-            report.action_bar_message = f"Generating code for 2D array declaration: {variable.name} (size block continued)"
-            report.looked_at_tree_node_id = self.unique_id
-            report.new_code = " - "
             yield report
             yield from self.bounds2.lower_bound.generate_code()
             report = CodeGenerationReport()
-            report.action_bar_message = f"Generating code for 2D array declaration: {variable.name} (finalizing size block for second dimension)"
+            report.action_bar_message = f"Generating code for 2D array declaration: {variable.name} (high2)"
             report.looked_at_tree_node_id = self.unique_id
-            report.new_code = " + 1) for _ in range("
+            report.new_code = ", "
             yield report
             yield from self.bounds1.upper_bound.generate_code()
             report = CodeGenerationReport()
-            report.action_bar_message = f"Generating code for 2D array declaration: {variable.name} (size block continued for first dimension)"
+            report.action_bar_message = f"Generating code for 2D array declaration: {variable.name} (close)"
             report.looked_at_tree_node_id = self.unique_id
-            report.new_code = " - "
-            yield report
-            yield from self.bounds1.lower_bound.generate_code()
-            report = CodeGenerationReport()
-            report.action_bar_message = f"Generating code for 2D array declaration: {variable.name} (finalizing size block for first dimension)"
-            report.looked_at_tree_node_id = self.unique_id
-            report.new_code = " + 1)])\n"
+            report.new_code = ")\n"
             yield report
         
 
@@ -752,12 +730,12 @@ class OneArrayAccess(Expression, Assignable):
         index (Expression): Index expression (CIE index space).
 
     Methods:
-        generate_code(...): Emits Python indexing into the backing list while offsetting
-            by the stored lower bound.
+        generate_code(...): Emits Python indexing into `CIEArray`, letting the runtime
+            handle bounds/offsets.
 
     Notes:
-        Arrays are represented as `(lower_bound, backing_list)`.
-        This node compiles `A[i]` into `(A[1][i - A[0]])`.
+        Arrays are represented using the runtime helper `CIEArray`.
+        This node compiles `A[i]` into `(A[i])`.
     """
 
     def __init__(self, array: Expression, index: Expression, line: int):
@@ -786,24 +764,24 @@ class OneArrayAccess(Expression, Assignable):
         Yields:
             CodeGenerationReport: Events containing expression fragments.
         """
-        # Arrays are represented as tuples: (lower_bound, backing_list).
+        # Arrays are represented via CIEArray (offsets handled by the class).
         # If the base is not a simple variable, avoid re-evaluating it by capturing it once.
         if isinstance(self.array, Variable):
             base_name = self.array.name
             report = CodeGenerationReport()
             report.action_bar_message = f"Generating code for 1D array access: {base_name}"
             report.looked_at_tree_node_id = self.unique_id
-            report.new_code = f"({base_name}[1]["
+            report.new_code = f"({base_name}["
             yield report
             yield from self.index.generate_code()
             report = CodeGenerationReport()
-            report.action_bar_message = f"Generating code for 1D array access: {base_name} (adjusting index)"
+            report.action_bar_message = f"Generating code for 1D array access: {base_name} (close)"
             report.looked_at_tree_node_id = self.unique_id
-            report.new_code = f" - {base_name}[0]])"
+            report.new_code = "])"
             yield report
             return
 
-        tmp_name = f"__cie_tmp_{self.unique_id}"
+        tmp_name = f"CIE_TMP_{self.unique_id}"
         report = CodeGenerationReport()
         report.action_bar_message = "Generating code for 1D array access (capturing base)"
         report.looked_at_tree_node_id = self.unique_id
@@ -811,15 +789,15 @@ class OneArrayAccess(Expression, Assignable):
         yield report
         yield from self.array.generate_code()
         report = CodeGenerationReport()
-        report.action_bar_message = "Generating code for 1D array access (indexing backing list)"
+        report.action_bar_message = "Generating code for 1D array access (indexing)"
         report.looked_at_tree_node_id = self.unique_id
-        report.new_code = f")[1]["
+        report.new_code = ")["
         yield report
         yield from self.index.generate_code()
         report = CodeGenerationReport()
-        report.action_bar_message = "Generating code for 1D array access (adjusting index)"
+        report.action_bar_message = "Generating code for 1D array access (close)"
         report.looked_at_tree_node_id = self.unique_id
-        report.new_code = f" - {tmp_name}[0]])"
+        report.new_code = "])"
         yield report
 
     def __repr__(self):
@@ -838,12 +816,12 @@ class TwoArrayAccess(Expression, Assignable):
         index2 (Expression): Second-dimension index expression (CIE index space).
 
     Methods:
-        generate_code(...): Emits Python indexing into the backing matrix while offsetting
-            by stored lower bounds.
+        generate_code(...): Emits Python indexing into `CIEArray`, letting the runtime
+            handle bounds/offsets.
 
     Notes:
-        2D arrays are represented as `(lower1, lower2, backing_matrix)`.
-        This node compiles `A[i,j]` into `(A[2][i - A[0]][j - A[1]])`.
+        2D arrays are represented using the runtime helper `CIEArray`.
+        This node compiles `A[i,j]` into `(A[i, j])`.
     """
 
     def __init__(
@@ -876,29 +854,29 @@ class TwoArrayAccess(Expression, Assignable):
         Yields:
             CodeGenerationReport: Events containing expression fragments.
         """
-        # 2D arrays are tuples: (low1, low2, backing_matrix).
+        # 2D arrays are represented via CIEArray (offsets handled by the class).
         if isinstance(self.array, Variable):
             base_name = self.array.name
             report = CodeGenerationReport()
             report.action_bar_message = f"Generating code for 2D array access: {base_name}"
             report.looked_at_tree_node_id = self.unique_id
-            report.new_code = f"({base_name}[2]["
+            report.new_code = f"({base_name}["
             yield report
             yield from self.index1.generate_code()
             report = CodeGenerationReport()
-            report.action_bar_message = f"Generating code for 2D array access: {base_name} (adjusting first index)"
+            report.action_bar_message = f"Generating code for 2D array access: {base_name} (comma)"
             report.looked_at_tree_node_id = self.unique_id
-            report.new_code = f" - {base_name}[0]]["
+            report.new_code = ", "
             yield report
             yield from self.index2.generate_code()
             report = CodeGenerationReport()
-            report.action_bar_message = f"Generating code for 2D array access: {base_name} (adjusting second index)"
+            report.action_bar_message = f"Generating code for 2D array access: {base_name} (close)"
             report.looked_at_tree_node_id = self.unique_id
-            report.new_code = f" - {base_name}[1]])"
+            report.new_code = "])"
             yield report
             return
 
-        tmp_name = f"__cie_tmp_{self.unique_id}"
+        tmp_name = f"CIE_TMP_{self.unique_id}"
         report = CodeGenerationReport()
         report.action_bar_message = "Generating code for 2D array access (capturing base)"
         report.looked_at_tree_node_id = self.unique_id
@@ -906,21 +884,21 @@ class TwoArrayAccess(Expression, Assignable):
         yield report
         yield from self.array.generate_code()
         report = CodeGenerationReport()
-        report.action_bar_message = "Generating code for 2D array access (indexing backing matrix)"
+        report.action_bar_message = "Generating code for 2D array access (indexing)"
         report.looked_at_tree_node_id = self.unique_id
-        report.new_code = f")[2]["
+        report.new_code = ")["
         yield report
         yield from self.index1.generate_code()
         report = CodeGenerationReport()
-        report.action_bar_message = "Generating code for 2D array access (adjusting first index)"
+        report.action_bar_message = "Generating code for 2D array access (comma)"
         report.looked_at_tree_node_id = self.unique_id
-        report.new_code = f" - {tmp_name}[0]]["
+        report.new_code = ", "
         yield report
         yield from self.index2.generate_code()
         report = CodeGenerationReport()
-        report.action_bar_message = "Generating code for 2D array access (adjusting second index)"
+        report.action_bar_message = "Generating code for 2D array access (close)"
         report.looked_at_tree_node_id = self.unique_id
-        report.new_code = f" - {tmp_name}[1]])"
+        report.new_code = "])"
         yield report
 
     def __repr__(self):
@@ -1463,7 +1441,7 @@ class InputStatement(Statement):
         variable (Variable): Target variable to assign input into.
 
     Methods:
-        generate_code(...): Emits a call to `input_and_convert()` (runtime helper).
+        generate_code(...): Emits a call to `InputAndConvert()` (runtime helper).
 
     Notes:
         Prompt strings are not modeled here; the runtime helper handles conversion.
@@ -1491,12 +1469,12 @@ class InputStatement(Statement):
             indent (str): Leading indentation for the statement.
 
         Yields:
-            CodeGenerationReport: Event containing the assignment to `input_and_convert()`.
+            CodeGenerationReport: Event containing the assignment to `InputAndConvert()`.
         """
         report = CodeGenerationReport()
         report.action_bar_message = f"Generating code for input statement: {self.variable.name}"
         report.looked_at_tree_node_id = self.unique_id
-        report.new_code = f"{indent}{self.variable.name} = input_and_convert() #type: ignore to adapt CIE input function\n"
+        report.new_code = f"{indent}{self.variable.name} = InputAndConvert() #type: ignore to adapt CIE input function\n"
         yield report
 
     def __repr__(self):
@@ -2539,7 +2517,7 @@ class OpenFileStatement(Statement):
         generate_code(...): Emits runtime bookkeeping for open files.
 
     Notes:
-        The runtime header is expected to provide `current_open_files`.
+        The runtime header is expected to provide `CURRENT_OPEN_FILES`.
     """
 
     def __init__(self, filename: Expression, mode: str, line: int):
@@ -2573,7 +2551,7 @@ class OpenFileStatement(Statement):
         report = CodeGenerationReport()
         report.action_bar_message = "Generating code for open file statement..."
         report.looked_at_tree_node_id = self.unique_id
-        report.new_code = f"{indent}current_open_files["
+        report.new_code = f"{indent}CURRENT_OPEN_FILES["
         yield report
         yield from self.filename.generate_code()
         report = CodeGenerationReport()
@@ -2596,7 +2574,7 @@ class ReadFileStatement(Statement):
     """READFILE statement.
 
     ```BNF:
-        <readfile_stmt> ::= 'READFILE' <expression> 'INTO' IDENTIFIER
+        <readfile_stmt> ::= 'READFILE' <expression> ',' IDENTIFIER
 ```
     Attributes:
         filename (Expression): Filename/path expression.
@@ -2641,7 +2619,7 @@ class ReadFileStatement(Statement):
         report = CodeGenerationReport()
         report.action_bar_message = "Continuing code for read file statement..."
         report.looked_at_tree_node_id = self.unique_id
-        report.new_code = f" = current_open_files["
+        report.new_code = f" = CURRENT_OPEN_FILES["
         yield report
         yield from self.filename.generate_code()
         report = CodeGenerationReport()
@@ -2664,7 +2642,7 @@ class EOFStatement(Expression):
         filename (Expression): Filename/path expression.
 
     Methods:
-        generate_code(...): Emits a call to the runtime helper `is_end_of_file(...)`.
+        generate_code(...): Emits a call to the runtime helper `IsEndOfFile(...)`.
     """
 
     def __init__(self, filename: Expression, line: int):
@@ -2689,12 +2667,12 @@ class EOFStatement(Expression):
             indent (str): Unused for expressions (kept for API consistency).
 
         Yields:
-            CodeGenerationReport: Events forming a call to `is_end_of_file(...)`.
+            CodeGenerationReport: Events forming a call to `IsEndOfFile(...)`.
         """
         report = CodeGenerationReport()
         report.action_bar_message = "Generating code for EOF function..."
         report.looked_at_tree_node_id = self.unique_id
-        report.new_code = f"{indent}is_end_of_file("
+        report.new_code = f"{indent}IsEndOfFile("
         yield report
         yield from self.filename.generate_code()
         report = CodeGenerationReport()
@@ -2749,7 +2727,7 @@ class WriteFileStatement(Statement):
         report = CodeGenerationReport()
         report.action_bar_message = "Generating code for write file statement..."
         report.looked_at_tree_node_id = self.unique_id
-        report.new_code = f"{indent}current_open_files["
+        report.new_code = f"{indent}CURRENT_OPEN_FILES["
         yield report
         yield from self.filename.generate_code()
         report = CodeGenerationReport()
@@ -2810,7 +2788,7 @@ class CloseFileStatement(Statement):
         report = CodeGenerationReport()
         report.action_bar_message = "Generating code for close file statement..."
         report.looked_at_tree_node_id = self.unique_id
-        report.new_code = f"{indent}current_open_files["
+        report.new_code = f"{indent}CURRENT_OPEN_FILES["
         yield report
         yield from self.filename.generate_code()
         report = CodeGenerationReport()
@@ -2821,7 +2799,7 @@ class CloseFileStatement(Statement):
         report = CodeGenerationReport()
         report.action_bar_message = "Finalizing code for close file statement..."
         report.looked_at_tree_node_id = self.unique_id
-        report.new_code = f"{indent}current_open_files.pop("
+        report.new_code = f"{indent}CURRENT_OPEN_FILES.pop("
         yield report
         yield from self.filename.generate_code()
         report = CodeGenerationReport()

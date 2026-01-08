@@ -1,0 +1,11 @@
+// TEST: caret '^' is not supported
+// EXPECTED: invalid (one error)
+// FAILS IN: Lexing
+// REASON: '^' is reserved for CIE pointer-type syntax and must not be treated as an operator
+
+DECLARE a, b : INTEGER
+a <- 2
+b <- 3
+
+// This should fail in lexing once POWER support is removed.
+a <- a ^ b

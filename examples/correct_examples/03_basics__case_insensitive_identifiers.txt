@@ -1,0 +1,14 @@
+// TEST: identifiers are case-insensitive
+// EXPECTED: valid
+
+DECLARE MyVar : INTEGER
+
+MyVar <- 10
+myvar <- myvar + 5
+OUTPUT "myvar = ", MYVAR
+
+PROCEDURE ShowValue(v : INTEGER)
+    OUTPUT "v = ", v
+ENDPROCEDURE
+
+CALL showvalue(MyVar)

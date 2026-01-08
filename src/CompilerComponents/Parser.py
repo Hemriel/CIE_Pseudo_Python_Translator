@@ -554,29 +554,17 @@ def parse_unary(state: _ParserState):
         return (yield from parse_primary(state))
 
 
-def parse_power(state: _ParserState):
-    """Parse an exponentiation expression.
-    <power> ::= <unary> ('POWER' <power>)?
-    """
-    left = yield from parse_unary(state)
-    operator = yield from _match_token(state, ["POWER"])
-    if operator:
-        right = yield from parse_power(state)
-        return BinaryExpression(left, operator.value, right, operator.line_number)
-    return left
-
-
 def parse_multiplicative(state: _ParserState):
     """Parse a multiplicative expression.
-    <multiplicative> ::= <power> (('MULTIPLY' | 'DIVIDE' | 'MOD' | 'DIV') <power>)*
+    <multiplicative> ::= <unary> (('MULTIPLY' | 'DIVIDE' | 'MOD' | 'DIV') <unary>)*
     """
-    left = yield from parse_power(state)
+    left = yield from parse_unary(state)
     next_token = yield from _peek_token(state)
     if next_token and next_token.type != TokenType.OPERATOR:
         return left
     operator = yield from _match_token(state, ["MULTIPLY", "DIVIDE", "MOD", "DIV"])
     while operator:
-        right = yield from parse_power(state)
+        right = yield from parse_unary(state)
         left = BinaryExpression(left, operator.value, right, operator.line_number)
         next_token = yield from _peek_token(state)
         if next_token and next_token.type != TokenType.OPERATOR:
@@ -1393,7 +1381,8 @@ def parse_read_file_function(state: _ParserState):
             raise ParsingError(
                 f"Line {readfile_token.line_number}: Invalid filename expression in READFILE function."
             )
-        yield from _expect_token(state, ["INTO"])
+        # CIE spec: READFILE <filename>, <variable>
+        yield from _expect_token(state, ["COMMA"])
         var_token = yield from _expect_token(state, [TokenType.IDENTIFIER])
         variable = Variable(var_token.value, var_token.line_number)
         yield from _emit_ast_subtree(state, variable, node_id)

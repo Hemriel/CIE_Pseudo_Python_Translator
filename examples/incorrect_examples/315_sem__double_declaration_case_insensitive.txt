@@ -1,0 +1,7 @@
+// TEST: double declaration after identifier normalization
+// EXPECTED: invalid (one error)
+// FAILS IN: Semantic
+// REASON: identifiers are case-insensitive, so `x` and `X` are the same symbol
+
+DECLARE x : INTEGER
+DECLARE X : INTEGER

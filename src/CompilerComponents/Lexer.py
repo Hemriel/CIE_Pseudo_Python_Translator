@@ -116,7 +116,6 @@ special_characters = [
     "*",
     ".",
     "/",
-    "^",
     "=",
     ">",
     "(",
@@ -135,7 +134,6 @@ symbols = {
     "-": (TokenType.OPERATOR, "MINUS"),
     "*": (TokenType.OPERATOR, "MULTIPLY"),
     "/": (TokenType.OPERATOR, "DIVIDE"),
-    "^": (TokenType.OPERATOR, "POWER"),
     "=": (TokenType.OPERATOR, "EQ"),
     "<>": (TokenType.OPERATOR, "NEQ"),
     "<": (TokenType.OPERATOR, "LT"),
@@ -174,7 +172,9 @@ def _scan_identifier_or_keyword(line: CleanLine, start: int) -> tuple[Token, int
     word = line.content[start:i]
     if word in keywords_types:
         return Token(keywords_types[word], word, line.line_number), i, "keyword"
-    return Token(TokenType.IDENTIFIER, word, line.line_number), i, "identifier"
+    # Normalize all identifiers to lowercase so the language behaves case-insensitively
+    # for user-defined names (variables, types, functions, procedures, fields).
+    return Token(TokenType.IDENTIFIER, word.lower(), line.line_number), i, "identifier"
 
 
 def _scan_number_or_date(line: CleanLine, start: int) -> tuple[Token, int, str]:

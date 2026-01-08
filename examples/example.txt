@@ -3,7 +3,7 @@
 // ------------------------------------------------------------
 // CIE Pseudocode Calculator Program (teaching example)
 // - Supports all binary operators implemented by this project:
-//   +  -  *  /  DIV  MOD  ^  =  <>  <  <=  >  >=  AND  OR  &
+//   +  -  *  /  DIV  MOD  =  <>  <  <=  >  >=  AND  OR  &
 // - Keeps the most recent 100 calculations in memory.
 // - When memory is full, flushes the oldest 10 entries to a history file.
 // - History is shown from file (older/flushed) + current in-memory entries.
@@ -93,7 +93,7 @@ PROCEDURE ShowHistoryFromFile()
     OUTPUT "----- History from file (older / already flushed) -----"
     WHILE NOT EOF(HISTORY_FILE)
         DECLARE line : STRING
-        READFILE HISTORY_FILE INTO line
+        READFILE HISTORY_FILE, line
         OUTPUT line
     ENDWHILE
     CLOSEFILE HISTORY_FILE
@@ -107,7 +107,7 @@ ENDPROCEDURE
 
 FUNCTION EvalNumeric(a : REAL, op : STRING, b : REAL) RETURNS REAL
     // Numeric operators:
-    // +  -  *  /  DIV  MOD  ^
+    // +  -  *  /  DIV  MOD
 
     DECLARE result : REAL
 
@@ -130,8 +130,6 @@ FUNCTION EvalNumeric(a : REAL, op : STRING, b : REAL) RETURNS REAL
             result <- a DIV b
         "MOD":
             result <- a MOD b
-        "^":
-            result <- a ^ b
         OTHERWISE:
             OUTPUT "Error: Unknown numeric operator."
             result <- 0
@@ -302,7 +300,7 @@ DECLARE historyCount : INTEGER
 historyCount <- 0
 
 OUTPUT "Calculator started."
-OUTPUT "Supported operators: +  -  *  /  DIV  MOD  ^  =  <>  <  <=  >  >=  AND  OR  &"
+OUTPUT "Supported operators: +  -  *  /  DIV  MOD  =  <>  <  <=  >  >=  AND  OR  &"
 OUTPUT "History is appended to: ", HISTORY_FILE
 
 // Show what is already in the file at startup ("loaded from file at the start").
@@ -327,7 +325,7 @@ REPEAT
         IF choice = 1 THEN
             // Read operator first, then decide what to ask for.
             OUTPUT "Enter operator:"
-            OUTPUT "  Numeric: +  -  *  /  DIV  MOD  ^"
+            OUTPUT "  Numeric: +  -  *  /  DIV  MOD"
             OUTPUT "  Compare: =  <>  <  <=  >  >="
             OUTPUT "  Boolean: AND  OR"
             OUTPUT "  String : &"
