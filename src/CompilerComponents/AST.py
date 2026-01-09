@@ -5,6 +5,7 @@ from CompilerComponents.ProgressReport import CodeGenerationReport
 from CompilerComponents.Token import TokenType, LITERAL_TYPES
 from CompilerComponents.Types import ASTNodeId
 from collections.abc import Generator
+from typing import Any
 
 
 operators_map = {
@@ -86,6 +87,13 @@ class ASTNode:
         self.edges: list[ASTNode] = []
         self.override_last = None
         self.unique_id: ASTNodeId | None = None  # Assigned during AST construction
+
+        # --- Static analysis annotations (populated by the type checker) ---
+        # These are intentionally optional and additive; UI/codegen should not
+        # depend on them unless explicitly wired.
+        self.static_type: Any = None
+        self.resolved_symbol: Any = None
+        self.resolved_scope: Any = None
 
     def tree_representation(self, prefix="", is_last=True) -> str:
         """Return a string representation of the node with indentation.
@@ -1217,16 +1225,16 @@ class MidStringMethod(Expression):
 
 
 class LowerStringMethod(Expression):
-    """Built-in LCASE(string) string function.
+    """Built-in LCASE(char) char function.
 
     ```BNF:
         <primary> ::= 'LCASE' '(' <expression> ')'
 ```
     Attributes:
-        string_expr (Expression): String expression.
+        string_expr (Expression): Character expression.
 
     Methods:
-        generate_code(...): Emits Python `s.lower()`.
+        generate_code(...): Emits Python `c.lower()`.
     """
 
     def __init__(self, string_expr: Expression, line: int):
@@ -1270,16 +1278,16 @@ class LowerStringMethod(Expression):
 
 
 class UpperStringMethod(Expression):
-    """Built-in UCASE(string) string function.
+    """Built-in UCASE(char) char function.
 
     ```BNF:
         <primary> ::= 'UCASE' '(' <expression> ')'
 ```
     Attributes:
-        string_expr (Expression): String expression.
+        string_expr (Expression): Character expression.
 
     Methods:
-        generate_code(...): Emits Python `s.upper()`.
+        generate_code(...): Emits Python `c.upper()`.
     """
 
     def __init__(self, string_expr: Expression, line: int):

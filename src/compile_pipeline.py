@@ -18,6 +18,7 @@ from CompilerComponents.ProgressReport import (
     LimitedSymbolTableReport,
     ParsingReport,
     SecondPassReport,
+    TypeCheckReport,
     TokenizationReport,
     TrimmingReport,
 )
@@ -25,6 +26,7 @@ from CompilerComponents.SemanticAnalyser import (
     get_first_pass_reporter,
     get_second_pass_reporter,
 )
+from CompilerComponents.TypeChecker import get_type_check_reporter
 from CompilerComponents.Symbols import SemanticError, SymbolTable
 
 
@@ -59,6 +61,7 @@ class PipelineSession:
         self._parsing_generator = None
         self._first_pass_analyser = None
         self._second_pass_analyser = None
+        self._type_check_analyser = None
         self._code_generator = None
 
     # ----- Trimming -----
@@ -179,6 +182,24 @@ class PipelineSession:
         except StopIteration:
             return True, None
 
+    # ----- Type checking (strong) -----
+
+    def begin_type_check(self) -> None:
+        if self.ast_root is None:
+            raise RuntimeError("No AST available for type checking.")
+        self._type_check_analyser = get_type_check_reporter(
+            self.ast_root, self.symbol_table_complete
+        )
+
+    def tick_type_check(self) -> tuple[bool, TypeCheckReport | None]:
+        if self._type_check_analyser is None:
+            raise RuntimeError("Type-check analyzer not initialized.")
+        try:
+            report: TypeCheckReport = next(self._type_check_analyser)
+            return False, report
+        except StopIteration:
+            return True, None
+
     # ----- Code generation -----
 
     def begin_code_generation(self, output_dir: str | Path = "outputs") -> None:
@@ -279,6 +300,18 @@ def compile_file_to_outputs(
         session.begin_second_pass(line=0)
         while True:
             done, report = session.tick_second_pass()
+            if done:
+                break
+            if report and report.error:
+                return False, None, str(report.error)
+    except StopIteration:
+        pass
+
+    # Strong type checking
+    try:
+        session.begin_type_check()
+        while True:
+            done, report = session.tick_type_check()
             if done:
                 break
             if report and report.error:

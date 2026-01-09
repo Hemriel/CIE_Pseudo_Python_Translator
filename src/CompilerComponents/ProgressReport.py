@@ -124,4 +124,17 @@ class CodeGenerationReport(ProgressReport):
         self.current_phase_number = "4"
         self.looked_at_tree_node_id : ASTNodeId | None = None
         self.new_code : str | None = None
+
+
+class TypeCheckReport(ProgressReport):
+    """Progress report for the strong type-checking phase."""
+
+    def __init__(self):
+        super().__init__()
+        self.current_phase_number = "3.3"
+        self.looked_at_tree_node_id: ASTNodeId | None = None
+        self.looked_at_symbol: Symbol | None = None
+        self.inferred_type_str: str | None = None
+        self.expected_type_str: str | None = None
+        self.error: Exception | None = None
         

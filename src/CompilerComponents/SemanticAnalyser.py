@@ -204,6 +204,24 @@ def get_first_pass_reporter(ast_node, sym_table: SymbolTable, current_scope="glo
         func_line = ast_node.line
         report.action_bar_message = f"Declaring function definition '{func_name}'."
         report.looked_at_tree_node_id = ast_node.unique_id
+
+        # Enforce the planned CALL/function separation:
+        # - FUNCTION must declare RETURNS <type>
+        # - PROCEDURE must not declare a return type
+        if ast_node.procedure:
+            if ast_node.return_type is not None:
+                report.error = SemanticError(
+                    f"Line {func_line}: Semantic error: PROCEDURE '{func_name}' must not declare a return type."
+                )
+                yield report
+                return
+        else:
+            if ast_node.return_type is None:
+                report.error = SemanticError(
+                    f"Line {func_line}: Semantic error: FUNCTION '{func_name}' must declare a return type (use: RETURNS <type>)."
+                )
+                yield report
+                return
         
         params = [(param.name, param.arg_type) for param in ast_node.parameters] # type: ignore
         sym = Symbol(
