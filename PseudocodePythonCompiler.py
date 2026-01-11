@@ -109,6 +109,7 @@ class CIEPseudocodeToPythonCompiler(App):
         self._programmatic_source_set: bool = False
 
         self._project_root: Path = Path(__file__).resolve().parent
+        self._fast_forward_mode: bool = False
 
     def compose(self) -> ComposeResult:
         """Create the layout of the application."""
@@ -184,6 +185,7 @@ class CIEPseudocodeToPythonCompiler(App):
         self.phase_failed = False
         self.running = False
         self.error_message = ""
+        self._fast_forward_mode = False
         self.refresh_bindings()
 
     def _refresh_title_bar(self) -> None:
@@ -389,9 +391,16 @@ class CIEPseudocodeToPythonCompiler(App):
         elif self.phase_failed:
             self.set_phase(PHASES[0])  # Restart from first phase
         else:
+            # Fast-forward the current phase without incremental UI updates.
             self.running = False
-            while not self.phase_completed and not self.phase_failed:
-                self.progress_tick()
+            self._fast_forward_mode = True
+            try:
+                ticking_method = ticking_methods.get(self.current_phase)
+                if ticking_method:
+                    while not self.phase_completed and not self.phase_failed:
+                        self.phase_completed = ticking_method(self)
+            finally:
+                self._fast_forward_mode = False
 
     def action_restart_compiler(self):
         """Restart the compiler to initial state."""
@@ -471,14 +480,20 @@ class CIEPseudocodeToPythonCompiler(App):
             done, report = self.pipeline.tick_trimming()
             if done:
                 self.source_trimmed = self.pipeline.source_trimmed
+                if self._fast_forward_mode:
+                    try:
+                        self.right_panel.trimmed_display.text = self.source_trimmed
+                    except Exception:
+                        pass
                 return True  # Trimming complete
 
             if report is None:
                 return False
             self.source_trimmed = self.pipeline.source_trimmed
-            self.left_panel.source_editor.apply_progress_report(report)
-            self.right_panel.trimmed_display.apply_progress_report(trim_report=report)
-            self.post_to_action_bar(report.action_bar_message, "info")
+            if not self._fast_forward_mode:
+                self.left_panel.source_editor.apply_progress_report(report)
+                self.right_panel.trimmed_display.apply_progress_report(trim_report=report)
+                self.post_to_action_bar(report.action_bar_message, "info")
             return False  # Trimming not yet complete
         except StopIteration:
             self.source_trimmed = self.pipeline.source_trimmed
@@ -499,12 +514,18 @@ class CIEPseudocodeToPythonCompiler(App):
         try:
             done, report = self.pipeline.tick_tokenization()
             if done:
+                if self._fast_forward_mode:
+                    try:
+                        self.right_panel.token_table.fill_table(self.tokens)
+                    except Exception:
+                        pass
                 return True  # Tokenization complete
             if report is None:
                 return False
-            self.right_panel.token_table.apply_progress_report(token_report=report)
-            self.left_panel.trimmed_display.apply_progress_report(token_report=report)
-            self.post_to_action_bar(report.action_bar_message, "info")
+            if not self._fast_forward_mode:
+                self.right_panel.token_table.apply_progress_report(token_report=report)
+                self.left_panel.trimmed_display.apply_progress_report(token_report=report)
+                self.post_to_action_bar(report.action_bar_message, "info")
             return False  # Tokenization not yet complete
         
         except StopIteration:
@@ -531,16 +552,25 @@ class CIEPseudocodeToPythonCompiler(App):
         try:
             done, report = self.pipeline.tick_limited_symbol_table()
             if done:
+                self.symbol_table_limited = self.pipeline.symbol_table_limited
+                if self._fast_forward_mode:
+                    try:
+                        self.right_panel.limited_symbol_table.clear()
+                        for sym in self.symbol_table_limited.symbols:
+                            self.right_panel.limited_symbol_table.add_symbol(sym)
+                    except Exception:
+                        pass
                 return True  # Symbol table generation complete
             if report is None:
                 return False
-            self.left_panel.token_table.apply_progress_report(
-                limited_symbol_table_report=report
-            )
-            self.right_panel.limited_symbol_table.apply_progress_report(
-                limited_report=report
-            )
-            self.post_to_action_bar(report.action_bar_message, "info")
+            if not self._fast_forward_mode:
+                self.left_panel.token_table.apply_progress_report(
+                    limited_symbol_table_report=report
+                )
+                self.right_panel.limited_symbol_table.apply_progress_report(
+                    limited_report=report
+                )
+                self.post_to_action_bar(report.action_bar_message, "info")
             return False  # Symbol table generation not yet complete
         except StopIteration:
             return True  # Symbol table generation complete
@@ -627,6 +657,11 @@ class CIEPseudocodeToPythonCompiler(App):
         try:
             done, report = self.pipeline.tick_type_check()
             if done:
+                if self._fast_forward_mode and self.ast_root is not None:
+                    try:
+                        self.left_panel.ast_tree.build_from_ast_root(self.ast_root, include_static_types=True)
+                    except Exception:
+                        pass
                 self.post_to_action_bar("Type checking completed.", "success")
                 return True
 
@@ -634,25 +669,26 @@ class CIEPseudocodeToPythonCompiler(App):
                 return False
 
             # Cursor tracking on the AST tree.
-            if report.looked_at_tree_node_id is not None:
-                node = self.left_panel.ast_tree.get_node_by_id(
-                    cast(Any, report.looked_at_tree_node_id)
-                )
-                if node:
-                    self.left_panel.ast_tree.move_cursor(node)
-                    self.left_panel.ast_tree.scroll_to_node(node)
-
-                # Refresh focused node (and subtree) labels in real time.
-                try:
-                    self.left_panel.ast_tree.refresh_labels_for_tree_id(
-                        cast(Any, report.looked_at_tree_node_id),
-                        include_descendants=True,
+            if not self._fast_forward_mode:
+                if report.looked_at_tree_node_id is not None:
+                    node = self.left_panel.ast_tree.get_node_by_id(
+                        cast(Any, report.looked_at_tree_node_id)
                     )
-                except Exception:
-                    pass
+                    if node:
+                        self.left_panel.ast_tree.move_cursor(node)
+                        self.left_panel.ast_tree.scroll_to_node(node)
 
-            if report.action_bar_message:
-                self.post_to_action_bar(report.action_bar_message, "info")
+                    # Refresh focused node (and subtree) labels in real time.
+                    try:
+                        self.left_panel.ast_tree.refresh_labels_for_tree_id(
+                            cast(Any, report.looked_at_tree_node_id),
+                            include_descendants=True,
+                        )
+                    except Exception:
+                        pass
+
+                if report.action_bar_message:
+                    self.post_to_action_bar(report.action_bar_message, "info")
 
             if report.error:
                 self.error_message = str(report.error)
@@ -674,6 +710,11 @@ class CIEPseudocodeToPythonCompiler(App):
             done, report = self.pipeline.tick_parsing()
             if done:
                 self.ast_root = self.pipeline.ast_root
+                if self._fast_forward_mode and self.ast_root is not None:
+                    try:
+                        self.right_panel.ast_tree.build_from_ast_root(self.ast_root)
+                    except Exception:
+                        pass
                 self.post_to_action_bar("Parsing completed.", "success")
                 return True
 
@@ -681,13 +722,15 @@ class CIEPseudocodeToPythonCompiler(App):
                 return False
 
             # Token cursor tracking
-            self.left_panel.token_table.apply_progress_report(parsing_report=report)
+            if not self._fast_forward_mode:
+                # Token cursor tracking
+                self.left_panel.token_table.apply_progress_report(parsing_report=report)
 
-            # Incremental AST tree building (supports incomplete nodes)
-            self.right_panel.ast_tree.apply_progress_report(parsing_report=report)
+                # Incremental AST tree building (supports incomplete nodes)
+                self.right_panel.ast_tree.apply_progress_report(parsing_report=report)
 
-            if report.action_bar_message:
-                self.post_to_action_bar(report.action_bar_message, "info")
+                if report.action_bar_message:
+                    self.post_to_action_bar(report.action_bar_message, "info")
 
             return False
 
@@ -708,6 +751,14 @@ class CIEPseudocodeToPythonCompiler(App):
         try:
             done, report = self.pipeline.tick_first_pass()
             if done:
+                if self._fast_forward_mode and self.ast_root is not None:
+                    try:
+                        self.left_panel.ast_tree.build_from_ast_root(self.ast_root)
+                        self.right_panel.complete_symbol_table.clear()
+                        for sym in self.pipeline.symbol_table_complete.symbols:
+                            self.right_panel.complete_symbol_table.add_symbol(sym)
+                    except Exception:
+                        pass
                 self.post_to_action_bar(
                     "Semantic analysis (first pass) completed.", "success"
                 )
@@ -717,15 +768,17 @@ class CIEPseudocodeToPythonCompiler(App):
                 return False
 
             # Token cursor tracking
-            self.left_panel.ast_tree.apply_progress_report(first_pass_report=report)
+            if not self._fast_forward_mode:
+                # Token cursor tracking
+                self.left_panel.ast_tree.apply_progress_report(first_pass_report=report)
 
-            # Incremental AST tree building (supports incomplete nodes)
-            self.right_panel.complete_symbol_table.apply_progress_report(
-                first_pass_report=report
-            )
+                # Incremental AST tree building (supports incomplete nodes)
+                self.right_panel.complete_symbol_table.apply_progress_report(
+                    first_pass_report=report
+                )
 
-            if report.action_bar_message:
-                self.post_to_action_bar(report.action_bar_message, "info")
+                if report.action_bar_message:
+                    self.post_to_action_bar(report.action_bar_message, "info")
 
             if report.error:
                 self.error_message = str(report.error)
@@ -751,6 +804,14 @@ class CIEPseudocodeToPythonCompiler(App):
         try:
             done, report = self.pipeline.tick_second_pass()
             if done:
+                if self._fast_forward_mode and self.ast_root is not None:
+                    try:
+                        self.left_panel.ast_tree.build_from_ast_root(self.ast_root, include_static_types=True)
+                        self.right_panel.complete_symbol_table.clear()
+                        for sym in self.pipeline.symbol_table_complete.symbols:
+                            self.right_panel.complete_symbol_table.add_symbol(sym)
+                    except Exception:
+                        pass
                 self.post_to_action_bar(
                     "Semantic analysis (second pass) completed.", "success"
                 )
@@ -760,15 +821,17 @@ class CIEPseudocodeToPythonCompiler(App):
                 return False
 
             # Token cursor tracking
-            self.left_panel.ast_tree.apply_progress_report(second_pass_report=report)
+            if not self._fast_forward_mode:
+                # Token cursor tracking
+                self.left_panel.ast_tree.apply_progress_report(second_pass_report=report)
 
-            # Incremental AST tree building (supports incomplete nodes)
-            self.right_panel.complete_symbol_table.apply_progress_report(
-                second_pass_report=report
-            )
+                # Incremental AST tree building (supports incomplete nodes)
+                self.right_panel.complete_symbol_table.apply_progress_report(
+                    second_pass_report=report
+                )
 
-            if report.action_bar_message:
-                self.post_to_action_bar(report.action_bar_message, "info")
+                if report.action_bar_message:
+                    self.post_to_action_bar(report.action_bar_message, "info")
 
             if report.error:
                 self.error_message = str(report.error)
@@ -785,19 +848,25 @@ class CIEPseudocodeToPythonCompiler(App):
 
     def compute_code_generation_tick(self) -> bool:
         """
-        Compute one tick of the semantic analysis (second pass) phase.
+        Compute one tick of the code generation phase.
         Returns:
-            bool: True if semantic analysis is complete, False otherwise.
+            bool: True if code generation is complete, False otherwise.
         """
         if self.phase_failed:
             return True
         try:
             done, report = self.pipeline.tick_code_generation()
             if done:
+                # Ensure UI shows final product code after fast-forward.
+                if self._fast_forward_mode:
+                    try:
+                        self.right_panel.product_code_display.text = self.pipeline.output_code
+                    except Exception:
+                        pass
                 out_dir = Path("outputs") / self.file_name
                 out_dir.mkdir(parents=True, exist_ok=True)
-                with open(out_dir / f"{self.file_name}.py", "w") as generated_file:
-                    generated_file.write(self.right_panel.product_code_display.text)
+                with open(out_dir / f"{self.file_name}.py", "w", encoding="utf-8") as generated_file:
+                    generated_file.write(self.pipeline.output_code)
                 self.post_to_action_bar(
                     f"Code generation completed. Output written to outputs/{self.file_name}/{self.file_name}.py.",
                     "success",
@@ -807,19 +876,12 @@ class CIEPseudocodeToPythonCompiler(App):
             if report is None:
                 return False
 
-            # Token cursor tracking
-            self.left_panel.ast_tree.apply_progress_report(
-                code_generation_report=report
-            )
-
-            # Incremental AST tree building (supports incomplete nodes)
-            self.right_panel.product_code_display.apply_progress_report(
-                code_generation_report=report
-            )
-
-            if report.action_bar_message:
-                self.post_to_action_bar(report.action_bar_message, "info")
-
+            if not self._fast_forward_mode:
+                # Cursor tracking on the AST tree and product code editor.
+                self.left_panel.ast_tree.apply_progress_report(code_generation_report=report)
+                self.right_panel.product_code_display.apply_progress_report(code_generation_report=report)
+                if report.action_bar_message:
+                    self.post_to_action_bar(report.action_bar_message, "info")
             return False
         except StopIteration:
             return True
