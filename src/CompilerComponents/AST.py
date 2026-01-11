@@ -1847,13 +1847,11 @@ class OpenFileStatement(Statement):
         return "Open File Statement : " + self.mode
     
     def generate_code(self, indent="") -> Generator[CodeGenerationReport, None, None]:
-        modes = {"READ": "r", "WRITE": "w", "APPEND": "a"}
-        self.mode = modes.get(self.mode.upper(), "r")
-        yield from _yield_report("Generating code for open file statement...", self.unique_id, f"{indent}CURRENT_OPEN_FILES[")
+        mode_map = {"READ": "READ", "WRITE": "WRITE", "APPEND": "APPEND"}
+        cie_mode = mode_map.get(self.mode.upper(), "READ")
+        yield from _yield_report("Generating code for open file statement...", self.unique_id, f"{indent}CIE_OpenFile(")
         yield from self.filename.generate_code()
-        yield from _yield_report("Continuing code for open file statement...", self.unique_id, f"] = open(")
-        yield from self.filename.generate_code()
-        yield from _yield_report("Finalizing code for open file statement...", self.unique_id, f", '{self.mode}')\n")
+        yield from _yield_report("Finalizing code for open file statement...", self.unique_id, f", '{cie_mode}')\n")
 
     def __repr__(self):
         return f"OpenFileStmtNode({self.filename}, mode={self.mode}, line {self.line})"
@@ -1883,11 +1881,11 @@ class ReadFileStatement(Statement):
         return "Read File Statement"
     
     def generate_code(self, indent="") -> Generator[CodeGenerationReport, None, None]:
-        yield from _yield_report("Generating code for read file statement...", self.unique_id, indent)
+        yield from _yield_report("Generating code for read file statement...", self.unique_id, f"{indent}")
         yield from self.variable.generate_code()
-        yield from _yield_report("Continuing code for read file statement...", self.unique_id, f" = CURRENT_OPEN_FILES[")
+        yield from _yield_report("Continuing code for read file statement...", self.unique_id, f" = CIE_ReadFile(")
         yield from self.filename.generate_code()
-        yield from _yield_report("Finalizing code for read file statement...", self.unique_id, f"].readline()\n")
+        yield from _yield_report("Finalizing code for read file statement...", self.unique_id, f")\n")
 
     def __repr__(self):
         return f"ReadFileStmtNode({self.filename}, {self.variable}, line {self.line})"
@@ -1946,11 +1944,11 @@ class WriteFileStatement(Statement):
         return "Write File Statement"
 
     def generate_code(self, indent="") -> Generator[CodeGenerationReport, None, None]:
-        yield from _yield_report("Generating code for write file statement...", self.unique_id, f"{indent}CURRENT_OPEN_FILES[")
+        yield from _yield_report("Generating code for write file statement...", self.unique_id, f"{indent}CIE_WriteFile(")
         yield from self.filename.generate_code()
-        yield from _yield_report("Continuing code for write file statement...", self.unique_id, f"].write(str(")
+        yield from _yield_report("Continuing code for write file statement...", self.unique_id, f", ")
         yield from self.expression.generate_code()
-        yield from _yield_report("Finalizing code for write file statement...", self.unique_id, f"))\n")
+        yield from _yield_report("Finalizing code for write file statement...", self.unique_id, f")\n")
 
     def __repr__(self):
         return (
@@ -1980,12 +1978,9 @@ class CloseFileStatement(Statement):
         return "Close File Statement"
     
     def generate_code(self, indent="") -> Generator[CodeGenerationReport, None, None]:
-        yield from _yield_report("Generating code for close file statement...", self.unique_id, f"{indent}CURRENT_OPEN_FILES[")
+        yield from _yield_report("Generating code for close file statement...", self.unique_id, f"{indent}CIE_CloseFile(")
         yield from self.filename.generate_code()
-        yield from _yield_report("Continuing code for close file statement...", self.unique_id, f"].close()\n")
-        yield from _yield_report("Finalizing code for close file statement...", self.unique_id, f"{indent}CURRENT_OPEN_FILES.pop(")
-        yield from self.filename.generate_code()
-        yield from _yield_report("Finished code for close file statement.", self.unique_id, f")\n")
+        yield from _yield_report("Finalizing code for close file statement...", self.unique_id, f")\n")
 
     def __repr__(self):
         return f"CloseFileStmtNode({self.filename}, line {self.line})"

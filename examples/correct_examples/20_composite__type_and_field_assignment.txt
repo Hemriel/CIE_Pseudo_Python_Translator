@@ -1,5 +1,7 @@
 // TEST: composite type declaration + field assignment
 // EXPECTED: valid
+// BEHAVIOR_CAPTURED_BY_OUTPUT: composite field defaults, field updates (Name/Age), and final readable summary
+// Tests custom TYPE definition and property access with tracing
 
 TYPE Person
     DECLARE Name : STRING
@@ -8,5 +10,18 @@ ENDTYPE
 
 DECLARE p : Person
 
+OUTPUT "===== Composite Type Test ====="
+OUTPUT "Person type defined with Name (STRING) and Age (INTEGER)"
+
+OUTPUT "Before assignment:"
+OUTPUT "p.Name = ", p.Name
+OUTPUT "p.Age = ", p.Age
+
 p.Name <- "Alice"
+OUTPUT "After p.Name <- Alice: p.Name = ", p.Name
+
 p.Age <- 17
+OUTPUT "After p.Age <- 17: p.Age = ", p.Age
+
+OUTPUT "Final state: ", p.Name, " is ", p.Age, " years old"
+OUTPUT "===== Composite Type Test Complete ====="

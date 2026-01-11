@@ -1,13 +1,33 @@
 // TEST: array indexing (1D + 2D) + whole-array assignment
 // EXPECTED: valid
+// BEHAVIOR_CAPTURED_BY_OUTPUT: 1D/2D element writes/reads, before/after whole-array assignment effects on representative indices
+// Tests element-wise and whole-array operations with tracing via OUTPUT
 
 DECLARE nums : ARRAY [1:10] OF INTEGER
 DECLARE matrix, grid : ARRAY [0:4, 1:3] OF REAL
 
-nums[2] <- 5
-nums[1] <- nums[2]
+OUTPUT "===== Array Operations Test ====="
 
+OUTPUT "1D Array Operations:"
+nums[2] <- 5
+OUTPUT "After nums[2] <- 5: nums[2] = ", nums[2]
+
+nums[1] <- nums[2]
+OUTPUT "After nums[1] <- nums[2]: nums[1] = ", nums[1], ", nums[2] = ", nums[2]
+
+OUTPUT "2D Array Operations:"
 matrix[4,3] <- 0.01
+OUTPUT "After matrix[4,3] <- 0.01: matrix[4,3] = ", matrix[4,3]
+
 grid[0,1] <- matrix[4,3]
+OUTPUT "After grid[0,1] <- matrix[4,3]: grid[0,1] = ", grid[0,1]
+
+OUTPUT "Before whole-array assignment:"
+OUTPUT "matrix[0,1] = ", matrix[0,1], ", grid[0,1] = ", grid[0,1]
 
 matrix <- grid
+OUTPUT "After matrix <- grid:"
+OUTPUT "matrix[0,1] = ", matrix[0,1], " (was ", grid[0,1], ")"
+OUTPUT "matrix[4,3] = ", matrix[4,3], " (was ", grid[4,3], ")"
+
+OUTPUT "===== Array Operations Test Complete ====="

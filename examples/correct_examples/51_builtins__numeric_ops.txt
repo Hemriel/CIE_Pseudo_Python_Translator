@@ -1,5 +1,6 @@
 // TEST: numeric built-ins (INT, RAND)
 // EXPECTED: valid
+// BEHAVIOR_CAPTURED_BY_OUTPUT: INT(real) conversion to INTEGER and RAND(seed) producing a REAL (validated via regex in harness)
 
 DECLARE x : REAL
 DECLARE i : INTEGER

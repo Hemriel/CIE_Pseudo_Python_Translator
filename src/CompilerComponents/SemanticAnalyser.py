@@ -120,6 +120,20 @@ def get_first_pass_reporter(ast_node, sym_table: SymbolTable, current_scope="glo
                 report.error = e
                 yield report
                 return
+            # Annotate the declared constant variable node with its type and symbol
+            try:
+                ast_node.variable.type = const_type
+            except Exception:
+                pass
+            try:
+                ast_node.variable.static_type = parse_symbol_type(const_type)
+            except Exception:
+                try:
+                    ast_node.variable.static_type = parse_type_name(const_type)
+                except Exception:
+                    pass
+            ast_node.variable.resolved_symbol = sym
+            ast_node.variable.resolved_scope = current_scope
             report.action_bar_message = (
                 f"Declaring constant '{var_name}' (constants are declared with CONSTANT and can only be assigned once)."
             )
@@ -157,6 +171,20 @@ def get_first_pass_reporter(ast_node, sym_table: SymbolTable, current_scope="glo
                 report.error = e
                 yield report
                 return
+            # Annotate the declared variable node with its type and symbol
+            try:
+                var.type = ast_node.var_type
+            except Exception:
+                pass
+            try:
+                var.static_type = parse_symbol_type(ast_node.var_type)
+            except Exception:
+                try:
+                    var.static_type = parse_type_name(ast_node.var_type)
+                except Exception:
+                    pass
+            var.resolved_symbol = sym
+            var.resolved_scope = current_scope
             report.new_symbol = sym
             yield report
     elif isinstance(ast_node, OneArrayDeclaration):
@@ -182,6 +210,21 @@ def get_first_pass_reporter(ast_node, sym_table: SymbolTable, current_scope="glo
                 report.error = e
                 yield report
                 return
+            # Annotate the declared array variable node with its array type and symbol
+            array_type = f"ARRAY[{ast_node.var_type}]"
+            try:
+                var.type = array_type
+            except Exception:
+                pass
+            try:
+                var.static_type = parse_symbol_type(array_type)
+            except Exception:
+                try:
+                    var.static_type = parse_type_name(array_type)
+                except Exception:
+                    pass
+            var.resolved_symbol = sym
+            var.resolved_scope = current_scope
             report.new_symbol = sym
             yield report
     elif isinstance(ast_node, TwoArrayDeclaration):
@@ -207,6 +250,21 @@ def get_first_pass_reporter(ast_node, sym_table: SymbolTable, current_scope="glo
                 report.error = e
                 yield report
                 return
+            # Annotate the declared 2D array variable node with its array type and symbol
+            array_type = f"2D ARRAY[{ast_node.var_type}]"
+            try:
+                var.type = array_type
+            except Exception:
+                pass
+            try:
+                var.static_type = parse_symbol_type(array_type)
+            except Exception:
+                try:
+                    var.static_type = parse_type_name(array_type)
+                except Exception:
+                    pass
+            var.resolved_symbol = sym
+            var.resolved_scope = current_scope
             report.new_symbol = sym
             yield report
     elif isinstance(ast_node, FunctionDefinition):
@@ -272,6 +330,21 @@ def get_first_pass_reporter(ast_node, sym_table: SymbolTable, current_scope="glo
                 report.error = e
                 yield report
                 return
+            # If parameters are Variable nodes, annotate them too; otherwise skip
+            try:
+                if isinstance(param, Variable):
+                    param.type = param.arg_type  # type: ignore
+                    try:
+                        param.static_type = parse_symbol_type(param.arg_type)  # type: ignore
+                    except Exception:
+                        try:
+                            param.static_type = parse_type_name(param.arg_type)  # type: ignore
+                        except Exception:
+                            pass
+                    param.resolved_symbol = sym
+                    param.resolved_scope = new_scope
+            except Exception:
+                pass
             report.new_symbol = sym
             yield report
         yield from get_first_pass_reporter(ast_node.body, sym_table, current_scope=new_scope)
@@ -318,6 +391,16 @@ def get_first_pass_reporter(ast_node, sym_table: SymbolTable, current_scope="glo
                 report.error = e
                 yield report
                 return
+            # Annotate the field Variable node with its type and symbol
+            try:
+                variable.static_type = parse_symbol_type(variable.type)
+            except Exception:
+                try:
+                    variable.static_type = parse_type_name(variable.type)
+                except Exception:
+                    pass
+            variable.resolved_symbol = sym
+            variable.resolved_scope = new_scope
             report.new_symbol = sym
             yield report
 

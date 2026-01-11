@@ -1,5 +1,6 @@
 // TEST: INPUT/OUTPUT for all primitive types
 // EXPECTED: valid
+// BEHAVIOR_CAPTURED_BY_OUTPUT: prompts before each INPUT and printed echo of all entered values across INTEGER/REAL/CHAR/STRING/BOOLEAN/DATE
 
 DECLARE a : INTEGER
 DECLARE b : REAL

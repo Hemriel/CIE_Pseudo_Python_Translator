@@ -1,5 +1,6 @@
 // TEST: string/char built-ins + concatenation
 // EXPECTED: valid
+// BEHAVIOR_CAPTURED_BY_OUTPUT: string built-ins (RIGHT/LENGTH/MID), char built-ins (LCASE/UCASE), and concatenation results
 
 DECLARE ThisString : STRING
 DECLARE ResultString : STRING

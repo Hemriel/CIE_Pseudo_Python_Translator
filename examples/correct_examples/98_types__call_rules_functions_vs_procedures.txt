@@ -1,5 +1,6 @@
 // TEST: type rules (CALL must target procedures; expressions must use functions)
 // EXPECTED: valid
+// BEHAVIOR_CAPTURED_BY_OUTPUT: function-used-in-expression result and procedure CALL side-effect output, demonstrating correct usage
 // COVERS:
 // - CALL is for procedures
 // - functions return a value and can be used in expressions

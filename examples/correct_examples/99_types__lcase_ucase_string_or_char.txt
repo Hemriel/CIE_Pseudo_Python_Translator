@@ -1,5 +1,6 @@
 // LCASE/UCASE project decision demo
 // Accepts CHAR or STRING and returns the same type.
+// BEHAVIOR_CAPTURED_BY_OUTPUT: LCASE(STRING) prints lowercase STRING; UCASE(CHAR) prints uppercase CHAR ("hello" and A)
 
 DECLARE s : STRING
 DECLARE c : CHAR

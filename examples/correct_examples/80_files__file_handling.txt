@@ -1,5 +1,6 @@
 // TEST: file operations (OPEN/READ/WRITE/CLOSE + EOF)
 // EXPECTED: valid
+// BEHAVIOR_CAPTURED_BY_OUTPUT: printed lines read from files and annotated messages for literal vs variable file identifiers
 
 // Example 1: Use a STRING variable as the file identifier
 

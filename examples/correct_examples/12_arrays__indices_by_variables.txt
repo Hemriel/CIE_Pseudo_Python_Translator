@@ -1,5 +1,6 @@
 // TEST: array indices can be variables (1D + 2D)
 // EXPECTED: valid
+// BEHAVIOR_CAPTURED_BY_OUTPUT: variable-driven indices in FOR loops and direct reads (nums[3], grid[2,1])
 
 DECLARE i, j : INTEGER
 

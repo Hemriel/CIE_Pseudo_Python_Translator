@@ -9,6 +9,10 @@
 #   CURRENT_OPEN_FILES
 #   InputAndConvert
 #   IsEndOfFile
+#   CIE_OpenFile
+#   CIE_ReadFile
+#   CIE_WriteFile
+#   CIE_CloseFile
 
 # Comments in the original code have been omitted.
 
@@ -19,10 +23,11 @@
 #   Date literals are represented as strings in "DD/MM/YYYY" format.
 #   Inputs are read as strings and type conversion is attempted.
 #   RAND(high) is implemented using `random.uniform(0, high)`.
+#   File I/O is managed via runtime helper functions.
 
 
 from random import uniform
-from io import TextIOWrapper
+from typing import IO, Any
 
 
 class CIEArray:
@@ -94,7 +99,7 @@ class CIEArray:
             return f"CIEArray1D([{self.low1}:{self.high1}])"
         return f"CIEArray2D([{self.low1}:{self.high1}], [{self.low2}:{self.high2}])"
 
-CURRENT_OPEN_FILES : dict[str, TextIOWrapper] = dict()
+CURRENT_OPEN_FILES : dict[str, IO[Any]] = dict()
 
 def InputAndConvert():
     user_input = input()
@@ -121,3 +126,62 @@ def IsEndOfFile(filename):
     end_pos = file.tell()
     file.seek(current_pos)
     return current_pos == end_pos
+
+def CIE_OpenFile(filename: str, mode: str) -> None:
+    """Open a file with CIE semantics.
+    
+    Args:
+        filename: Path to the file to open.
+        mode: One of 'READ', 'WRITE', or 'APPEND'.
+    
+    Raises:
+        ValueError: If mode is not recognized.
+    """
+    mode_map = {'READ': 'r', 'WRITE': 'w', 'APPEND': 'a'}
+    if mode not in mode_map:
+        raise ValueError(f"Invalid file mode: {mode}. Expected 'READ', 'WRITE', or 'APPEND'.")
+    CURRENT_OPEN_FILES[filename] = open(filename, mode_map[mode])
+
+def CIE_ReadFile(filename: str) -> str:
+    """Read a line from an open file.
+    
+    Args:
+        filename: Path to the file to read from.
+    
+    Returns:
+        The line read from the file (including newline if present).
+    
+    Raises:
+        RuntimeError: If the file is not open.
+    """
+    if filename not in CURRENT_OPEN_FILES:
+        raise RuntimeError(f"File '{filename}' is not open for reading.")
+    return CURRENT_OPEN_FILES[filename].readline()
+
+def CIE_WriteFile(filename: str, data) -> None:
+    """Write data to an open file.
+    
+    Args:
+        filename: Path to the file to write to.
+        data: Data to write (will be converted to string).
+    
+    Raises:
+        RuntimeError: If the file is not open.
+    """
+    if filename not in CURRENT_OPEN_FILES:
+        raise RuntimeError(f"File '{filename}' is not open for writing.")
+    CURRENT_OPEN_FILES[filename].write(str(data))
+
+def CIE_CloseFile(filename: str) -> None:
+    """Close an open file.
+    
+    Args:
+        filename: Path to the file to close.
+    
+    Raises:
+        RuntimeError: If the file is not open.
+    """
+    if filename not in CURRENT_OPEN_FILES:
+        raise RuntimeError(f"File '{filename}' is not open.")
+    CURRENT_OPEN_FILES[filename].close()
+    CURRENT_OPEN_FILES.pop(filename)

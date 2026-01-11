@@ -1,5 +1,6 @@
 // TEST: arithmetic operators (+ - * / DIV MOD)
 // EXPECTED: valid
+// BEHAVIOR_CAPTURED_BY_OUTPUT: computed results for +, -, *, / (REAL), DIV (integer quotient), MOD (remainder) with annotated operands
 
 DECLARE a, b, sum, diff, prod, quotient, intQuot, remainder : INTEGER
 DECLARE realQuotient : REAL

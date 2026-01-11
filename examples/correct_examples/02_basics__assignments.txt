@@ -1,5 +1,7 @@
 // TEST: assignments (literals + variable-to-variable)
 // EXPECTED: valid
+// BEHAVIOR_CAPTURED_BY_OUTPUT: before/after state of each assignment for INTEGER/REAL/CHAR/STRING/BOOLEAN/DATE including variable-to-variable copies
+// Tests that values can be assigned to all primitive types and output correctly
 
 DECLARE a : INTEGER
 DECLARE b1, b2 : REAL
@@ -8,10 +10,31 @@ DECLARE d : STRING
 DECLARE e : BOOLEAN
 DECLARE f : DATE
 
+OUTPUT "===== Assignments Test ====="
+OUTPUT "Before assignment (defaults):"
+OUTPUT "a = ", a
+OUTPUT "b1 = ", b1
+OUTPUT "b2 = ", b2
+
 a <- 5
+OUTPUT "After a <- 5: a = ", a
+
 b2 <- 3.14
+OUTPUT "After b2 <- 3.14: b2 = ", b2
+
 b1 <- b2
+OUTPUT "After b1 <- b2: b1 = ", b1
+
 c <- 'Z'
+OUTPUT "After c <- 'Z': c = ", c
+
 d <- "Hello world"
+OUTPUT "After d <- Hello world: d = ", d
+
 e <- TRUE
+OUTPUT "After e <- TRUE: e = ", e
+
 f <- 25/12/2025
+OUTPUT "After f <- 25/12/2025: f = ", f
+
+OUTPUT "===== Assignments Test Complete ====="

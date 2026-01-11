@@ -1,5 +1,6 @@
 // TEST: recursion in functions
 // EXPECTED: valid
+// BEHAVIOR_CAPTURED_BY_OUTPUT: recursive function behavior via final computed result displayed (Factorial(5))
 
 FUNCTION Factorial(n : INTEGER) RETURNS INTEGER
     IF n <= 1 THEN

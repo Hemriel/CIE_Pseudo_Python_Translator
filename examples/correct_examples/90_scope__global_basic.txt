@@ -1,5 +1,6 @@
 // TEST: scope (basic global usage)
 // EXPECTED: valid
+// BEHAVIOR_CAPTURED_BY_OUTPUT: global variable usage and dependent computation (y <- x + 5) with printed values
 
 DECLARE x : INTEGER
 x <- 10

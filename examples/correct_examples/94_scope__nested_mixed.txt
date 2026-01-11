@@ -1,5 +1,6 @@
 // TEST: scope (FUNCTION scope exists; IF/FOR/WHILE do not)
 // EXPECTED: valid
+// BEHAVIOR_CAPTURED_BY_OUTPUT: function-local vs global resolution confirmed by printed results after nested IF/FOR/WHILE usage
 
 DECLARE x : INTEGER
 x <- 1

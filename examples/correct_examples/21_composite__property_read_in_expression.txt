@@ -1,5 +1,6 @@
 // TEST: property read used inside expressions
 // EXPECTED: valid
+// BEHAVIOR_CAPTURED_BY_OUTPUT: property read (p.Age) contributing to computed result (nextAge) and printed outcome
 
 TYPE Person
     DECLARE Age : INTEGER

@@ -1,5 +1,6 @@
 // TEST: functions (params, returns, nested calls)
 // EXPECTED: valid
+// BEHAVIOR_CAPTURED_BY_OUTPUT: function return values, nested function calls, and composition of results in expressions
 
 DECLARE a, b : INTEGER
 DECLARE result : INTEGER

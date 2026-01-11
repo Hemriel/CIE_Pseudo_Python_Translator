@@ -1,5 +1,6 @@
 // TEST: REPEAT/UNTIL (post-condition loop)
 // EXPECTED: valid
+// BEHAVIOR_CAPTURED_BY_OUTPUT: prompt for INPUT, loop iteration count, and termination condition reached
 
 DECLARE counter : INTEGER
 DECLARE limit : INTEGER

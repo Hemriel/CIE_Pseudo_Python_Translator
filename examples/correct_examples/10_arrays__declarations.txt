@@ -1,5 +1,24 @@
 // TEST: array declarations (1D + 2D)
 // EXPECTED: valid
+// BEHAVIOR_CAPTURED_BY_OUTPUT: array bounds acknowledgment and element write/read verification (nums[1], nums[10], matrix[0,1], grid[4,3])
+// Tests that 1D and 2D arrays can be declared and that bounds are accepted
 
 DECLARE nums : ARRAY [1:10] OF INTEGER
 DECLARE matrix, grid : ARRAY [0:4, 1:3] OF REAL
+
+OUTPUT "===== Array Declarations Test ====="
+OUTPUT "Array nums declared: ARRAY [1:10] OF INTEGER"
+OUTPUT "Arrays matrix, grid declared: ARRAY [0:4, 1:3] OF REAL"
+
+// Set some values to confirm arrays are working
+nums[1] <- 100
+nums[10] <- 999
+OUTPUT "nums[1] = ", nums[1]
+OUTPUT "nums[10] = ", nums[10]
+
+matrix[0, 1] <- 1.5
+grid[4, 3] <- 9.9
+OUTPUT "matrix[0,1] = ", matrix[0, 1]
+OUTPUT "grid[4,3] = ", grid[4, 3]
+
+OUTPUT "===== Array Declarations Test Complete ====="

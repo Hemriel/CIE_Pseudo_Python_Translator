@@ -1,5 +1,6 @@
 // TEST: scope (property name vs global name)
 // EXPECTED: valid
+// BEHAVIOR_CAPTURED_BY_OUTPUT: resolution of property vs global name collision by printing composite field value
 
 DECLARE name : INTEGER
 name <- 999

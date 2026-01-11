@@ -1,5 +1,6 @@
 // TEST: type rules (DATE assign + DATE comparisons only)
 // EXPECTED: valid
+// BEHAVIOR_CAPTURED_BY_OUTPUT: DATE comparison result and DATE assignment echo, confirming allowed operations
 // COVERS:
 // - DATE variables can be assigned from DATE literals and other DATE variables
 // - DATE values can be compared to other DATE values

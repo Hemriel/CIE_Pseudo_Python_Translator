@@ -1,5 +1,6 @@
 // TEST: WHILE loops (normal + 0-iteration)
 // EXPECTED: valid
+// BEHAVIOR_CAPTURED_BY_OUTPUT: iteration values for counting loop and proof of 0-iteration when initial condition is FALSE
 
 DECLARE counter : INTEGER
 counter <- 0

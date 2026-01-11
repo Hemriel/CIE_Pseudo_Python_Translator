@@ -1,5 +1,6 @@
 // TEST: CASE (with OTHERWISE and without)
 // EXPECTED: valid
+// BEHAVIOR_CAPTURED_BY_OUTPUT: branch selection for numeric and CHAR cases, prompts for INPUT, and messages per branch/OTHERWISE
 
 DECLARE choice : INTEGER
 DECLARE message : STRING

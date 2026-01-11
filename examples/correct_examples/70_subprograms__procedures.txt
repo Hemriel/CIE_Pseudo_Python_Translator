@@ -1,5 +1,6 @@
 // TEST: procedures (params, locals, calls with vars/literals/expressions)
 // EXPECTED: valid
+// BEHAVIOR_CAPTURED_BY_OUTPUT: procedure outputs demonstrating parameter passing (vars/literals/expressions), local computations, and call order
 
 // Procedure with no parameters
 PROCEDURE SayHello()

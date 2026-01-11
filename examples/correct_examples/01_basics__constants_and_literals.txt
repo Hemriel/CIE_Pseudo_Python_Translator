@@ -1,5 +1,7 @@
 // TEST: constants and literal forms (int/real/char/string/bool/date)
 // EXPECTED: valid
+// BEHAVIOR_CAPTURED_BY_OUTPUT: values of constants across all literal types printed directly
+// Tests that all literal types can be assigned to constants and output correctly
 
 CONSTANT a = 6
 CONSTANT b = 2.03
@@ -7,3 +9,12 @@ CONSTANT c = 'h'
 CONSTANT d = "test"
 CONSTANT e = TRUE
 CONSTANT f = 22/02/2022
+
+OUTPUT "===== Constants and Literals Test ====="
+OUTPUT "INTEGER constant a = ", a
+OUTPUT "REAL constant b = ", b
+OUTPUT "CHAR constant c = ", c
+OUTPUT "STRING constant d = ", d
+OUTPUT "BOOLEAN constant e = ", e
+OUTPUT "DATE constant f = ", f
+OUTPUT "===== Constants and Literals Test Complete ====="

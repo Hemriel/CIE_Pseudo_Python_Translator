@@ -1,5 +1,6 @@
 // TEST: logical operators (AND/OR/NOT) + parentheses
 // EXPECTED: valid
+// BEHAVIOR_CAPTURED_BY_OUTPUT: boolean results for AND/OR/NOT with literals, parenthesized expressions, and precedence cases
 
 // AND
 OUTPUT "TRUE AND TRUE = ", (TRUE AND TRUE)

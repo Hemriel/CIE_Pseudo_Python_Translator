@@ -1,5 +1,6 @@
 // TEST: IF (with/without ELSE, nested, boolean condition)
 // EXPECTED: valid
+// BEHAVIOR_CAPTURED_BY_OUTPUT: branch selection across simple, nested, and boolean-guarded IFs with annotated messages per path
 
 DECLARE x : INTEGER
 DECLARE y : INTEGER

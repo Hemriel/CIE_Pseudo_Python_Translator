@@ -1,5 +1,6 @@
 // TEST: type rules (numeric promotion + division result types)
 // EXPECTED: valid
+// BEHAVIOR_CAPTURED_BY_OUTPUT: INTEGER→REAL promotion, '/' producing REAL, and 'DIV' producing INTEGER, all printed for verification
 // COVERS:
 // - INTEGER -> REAL assignment allowed
 // - '/' produces REAL

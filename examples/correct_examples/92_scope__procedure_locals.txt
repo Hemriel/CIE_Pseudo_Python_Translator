@@ -1,5 +1,6 @@
 // TEST: scope (procedure locals)
 // EXPECTED: valid
+// BEHAVIOR_CAPTURED_BY_OUTPUT: procedure-local variable shadowing demonstrated by printing inside procedure vs global after call
 
 DECLARE g : INTEGER
 g <- 1

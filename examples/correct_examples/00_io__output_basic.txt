@@ -1,0 +1,50 @@
+// TEST: OUTPUT basic functionality (foundational)
+// EXPECTED: valid, demonstrates OUTPUT with all literal types
+// BEHAVIOR_CAPTURED_BY_OUTPUT: literals (int/real/char/bool/date), string concatenation, multi-value outputs, mixed-type formatting
+// This is the foundational test for output-driven behavior testing.
+// All other examples will use OUTPUT to trace their behavior.
+
+// String literals
+OUTPUT "===== OUTPUT Basic Test ====="
+
+// Integer OUTPUT
+OUTPUT "Integer literals:"
+OUTPUT 42
+OUTPUT -17
+OUTPUT 0
+
+// Real OUTPUT
+OUTPUT "Real literals:"
+OUTPUT 3.14
+OUTPUT -2.5
+OUTPUT 0.0
+
+// Char OUTPUT
+OUTPUT "Char literals:"
+OUTPUT 'A'
+OUTPUT 'z'
+OUTPUT ' '
+
+// Boolean OUTPUT
+OUTPUT "Boolean literals:"
+OUTPUT TRUE
+OUTPUT FALSE
+
+// Date OUTPUT
+OUTPUT "Date literals:"
+OUTPUT 01/01/2000
+OUTPUT 25/12/2025
+OUTPUT 31/12/1999
+
+// String concatenation with &
+OUTPUT "Concatenation:"
+OUTPUT "Hello" & " " & "World"
+OUTPUT "Value: " & "42"
+
+// Multiple values per OUTPUT (comma-separated)
+OUTPUT "Multiple values: ", 1, " ", 2, " ", 3
+
+// Mixed types
+OUTPUT "Mixed types: ", TRUE, ", ", 3.14, ", ", 'X'
+
+OUTPUT "===== OUTPUT Basic Test Complete ====="

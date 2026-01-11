@@ -1,5 +1,6 @@
 // TEST: identifiers are case-insensitive
 // EXPECTED: valid
+// BEHAVIOR_CAPTURED_BY_OUTPUT: identifier normalization across cases (MyVar/myvar/MYVAR) and procedure call with mixed-case name
 
 DECLARE MyVar : INTEGER
 

@@ -1,5 +1,6 @@
 // TEST: unary + and - operators
 // EXPECTED: valid
+// BEHAVIOR_CAPTURED_BY_OUTPUT: effects of unary plus/minus on INTEGER/REAL, nested unary applications, and parenthesized unary expressions
 
 DECLARE x, y : INTEGER
 DECLARE z : REAL

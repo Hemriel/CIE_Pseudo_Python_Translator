@@ -1,5 +1,6 @@
 // TEST: complex expressions + precedence across operators
 // EXPECTED: valid
+// BEHAVIOR_CAPTURED_BY_OUTPUT: arithmetic precedence, mixed comparison with REALs, boolean composition (NOT/AND/OR), and derived integer computations
 
 // Arithmetic precedence and parentheses
 DECLARE a, b, c : INTEGER

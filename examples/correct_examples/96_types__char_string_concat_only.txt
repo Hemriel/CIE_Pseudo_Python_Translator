@@ -1,5 +1,6 @@
 // TEST: type rules (CHAR vs STRING strictness + concatenation)
 // EXPECTED: valid
+// BEHAVIOR_CAPTURED_BY_OUTPUT: concatenation results for CHAR+STRING and STRING+CHAR, demonstrating output of resulting STRINGs
 // COVERS:
 // - CHAR and STRING are distinct
 // - '&' concatenation accepts CHAR/STRING operands and produces STRING

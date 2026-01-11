@@ -1,5 +1,7 @@
 // TEST: declarations (all primitive types + multi-declare)
 // EXPECTED: valid
+// BEHAVIOR_CAPTURED_BY_OUTPUT: default/zero values for INTEGER/REAL/CHAR/STRING/BOOLEAN/DATE immediately after declaration
+// Tests that all primitive types can be declared and have zero-like defaults
 
 DECLARE a : INTEGER
 DECLARE b1, b2 : REAL
@@ -7,3 +9,16 @@ DECLARE c : CHAR
 DECLARE d1, d2 : STRING
 DECLARE e : BOOLEAN
 DECLARE f1, f2 : DATE
+
+OUTPUT "===== Declarations Test ====="
+OUTPUT "After declaration (all should show default/zero values):"
+OUTPUT "INTEGER a = ", a
+OUTPUT "REAL b1 = ", b1
+OUTPUT "REAL b2 = ", b2
+OUTPUT "CHAR c = ", c
+OUTPUT "STRING d1 = ", d1
+OUTPUT "STRING d2 = ", d2
+OUTPUT "BOOLEAN e = ", e
+OUTPUT "DATE f1 = ", f1
+OUTPUT "DATE f2 = ", f2
+OUTPUT "===== Declarations Test Complete ====="

@@ -1,0 +1,308 @@
+{
+  "00_basics__declarations": {
+    "stdout": "===== Declarations Test =====\nAfter declaration (all should show default/zero values):\nINTEGER a = 0\nREAL b1 = 0.0\nREAL b2 = 0.0\nCHAR c =\nSTRING d1 =\nSTRING d2 =\nBOOLEAN e = False\nDATE f1 = 01/01/1970\nDATE f2 = 01/01/1970\n===== Declarations Test Complete =====",
+    "tags": [
+      "simple",
+      "no-io",
+      "no-input"
+    ],
+    "has_inputs": false
+  },
+  "00_io__output_basic": {
+    "stdout": "===== OUTPUT Basic Test =====\nInteger literals:\n42\n-17\n0\nReal literals:\n3.14\n-2.5\n0.0\nChar literals:\nA\nz\n\nBoolean literals:\nTrue\nFalse\nDate literals:\n01/01/2000\n25/12/2025\n31/12/1999\nConcatenation:\nHello World\nValue: 42\nMultiple values: 1 2 3\nMixed types: True, 3.14, X\n===== OUTPUT Basic Test Complete =====",
+    "tags": [
+      "simple",
+      "no-io",
+      "no-input"
+    ],
+    "has_inputs": false
+  },
+  "01_basics__constants_and_literals": {
+    "stdout": "===== Constants and Literals Test =====\nINTEGER constant a = 6\nREAL constant b = 2.03\nCHAR constant c = h\nSTRING constant d = test\nBOOLEAN constant e = True\nDATE constant f = 22/02/2022\n===== Constants and Literals Test Complete =====",
+    "tags": [
+      "simple",
+      "no-io",
+      "no-input"
+    ],
+    "has_inputs": false
+  },
+  "02_basics__assignments": {
+    "stdout": "===== Assignments Test =====\nBefore assignment (defaults):\na = 0\nb1 = 0.0\nb2 = 0.0\nAfter a <- 5: a = 5\nAfter b2 <- 3.14: b2 = 3.14\nAfter b1 <- b2: b1 = 3.14\nAfter c <- 'Z': c = Z\nAfter d <- Hello world: d = Hello world\nAfter e <- TRUE: e = True\nAfter f <- 25/12/2025: f = 25/12/2025\n===== Assignments Test Complete =====",
+    "tags": [
+      "simple",
+      "no-io",
+      "no-input"
+    ],
+    "has_inputs": false
+  },
+  "03_basics__case_insensitive_identifiers": {
+    "stdout": "myvar = 15\nv = 15",
+    "tags": [
+      "simple",
+      "no-io",
+      "no-input"
+    ],
+    "has_inputs": false
+  },
+  "100_types__input_into_primitives_ok": {
+    "stdout": "42\n3.14\nx\nhello\nFalse\n01/01/2024",
+    "tags": [
+      "interactive",
+      "no-io"
+    ],
+    "has_inputs": true
+  },
+  "10_arrays__declarations": {
+    "stdout": "===== Array Declarations Test =====\nArray nums declared: ARRAY [1:10] OF INTEGER\nArrays matrix, grid declared: ARRAY [0:4, 1:3] OF REAL\nnums[1] = 100\nnums[10] = 999\nmatrix[0,1] = 1.5\ngrid[4,3] = 9.9\n===== Array Declarations Test Complete =====",
+    "tags": [
+      "simple",
+      "no-io",
+      "no-input"
+    ],
+    "has_inputs": false
+  },
+  "11_arrays__indexing_and_whole_assignment": {
+    "stdout": "===== Array Operations Test =====\n1D Array Operations:\nAfter nums[2] <- 5: nums[2] = 5\nAfter nums[1] <- nums[2]: nums[1] = 5, nums[2] = 5\n2D Array Operations:\nAfter matrix[4,3] <- 0.01: matrix[4,3] = 0.01\nAfter grid[0,1] <- matrix[4,3]: grid[0,1] = 0.01\nBefore whole-array assignment:\nmatrix[0,1] = 0.0, grid[0,1] = 0.01\nAfter matrix <- grid:\nmatrix[0,1] = 0.01 (was 0.01)\nmatrix[4,3] = 0.0 (was 0.0)\n===== Array Operations Test Complete =====",
+    "tags": [
+      "simple",
+      "no-io",
+      "no-input"
+    ],
+    "has_inputs": false
+  },
+  "12_arrays__indices_by_variables": {
+    "stdout": "nums[3]=9\ngrid[2,1]=21",
+    "tags": [
+      "simple",
+      "no-io",
+      "no-input"
+    ],
+    "has_inputs": false
+  },
+  "20_composite__type_and_field_assignment": {
+    "stdout": "===== Composite Type Test =====\nPerson type defined with Name (STRING) and Age (INTEGER)\nBefore assignment:\np.Name =\np.Age = 0\nAfter p.Name <- Alice: p.Name = Alice\nAfter p.Age <- 17: p.Age = 17\nFinal state: Alice is 17 years old\n===== Composite Type Test Complete =====",
+    "tags": [
+      "simple",
+      "no-io",
+      "no-input"
+    ],
+    "has_inputs": false
+  },
+  "21_composite__property_read_in_expression": {
+    "stdout": "nextAge=41",
+    "tags": [
+      "simple",
+      "no-io",
+      "no-input"
+    ],
+    "has_inputs": false
+  },
+  "30_io__input_and_output": {
+    "stdout": "type an integer for a\ntype an real for b\ntype a char for c\ntype a string for d\ntype an boolean for e\ntype an date for f\nhere are your values\na = 42\nb = 3.14\nc = x\nd = hello\ne = True\nf = 25/12/2025",
+    "tags": [
+      "interactive",
+      "no-io"
+    ],
+    "has_inputs": true
+  },
+  "41_expr__relational_ops": {
+    "stdout": "x = 10 y = 7\nx > y  => True\nx < y  => False\nx >= y => True\nx <= y => False\nx = y  => False\nx <> y => True",
+    "tags": [
+      "simple",
+      "no-io",
+      "no-input"
+    ],
+    "has_inputs": false
+  },
+  "42_expr__logical_ops": {
+    "stdout": "TRUE AND TRUE = True\nTRUE AND FALSE = False\nFALSE AND TRUE = False\nFALSE AND FALSE = False\nTRUE OR TRUE = True\nTRUE OR FALSE = True\nFALSE OR TRUE = True\nFALSE OR FALSE = False\nNOT TRUE = False\nNOT FALSE = True\nNOT (16 >= 18) = True\n(TRUE AND TRUE) OR ((16 >= 18) AND TRUE) = True\nNOT ((TRUE = FALSE) OR (FALSE = FALSE)) = False",
+    "tags": [
+      "simple",
+      "no-io",
+      "no-input"
+    ],
+    "has_inputs": false
+  },
+  "43_expr__complex_precedence": {
+    "stdout": "a = 7, b = 3\nc = (a + b) * (a - b) + a * a => 89\nx / y > 3.0 => True\n(x - y) <= 10.0 => True\np = (a MOD 2 = 1) => True\nq = (b DIV 2 = 1) => True\nr = (NOT p) OR (q AND (a + b > 5)) => True\nn = (a + b) * 2 - (c DIV 10) => 12\nok = (c >= 0) AND (n <> 0) => True",
+    "tags": [
+      "simple",
+      "no-io",
+      "no-input"
+    ],
+    "has_inputs": false
+  },
+  "44_expr__unary_plus_minus": {
+    "stdout": "x=5\ny=-x=-5\nz=-2.5=-2.5\n+x=5\n-(x+3)=-8\n-(-x)=5",
+    "tags": [
+      "simple",
+      "no-io",
+      "no-input"
+    ],
+    "has_inputs": false
+  },
+  "50_builtins__string_ops": {
+    "stdout": "RIGHT(ABCDEFGH, 3) returns FGH\nLENGTH(Happy Days) returns 10\nMID(ABCDEFGH, 2, 3) returns BCD\nLCASE(W) returns w\nUCASE(h) returns H\nHello + World = Hello World",
+    "tags": [
+      "simple",
+      "no-io",
+      "no-input"
+    ],
+    "has_inputs": false
+  },
+  "51_builtins__numeric_ops": {
+    "stdout": null,
+    "regex_pattern": "RAND\\([^)]+\\) = \\\\d+(?:\\\\.\\\\d+)?",
+    "tags": [
+      "simple",
+      "no-io",
+      "no-input",
+      "rng"
+    ],
+    "has_inputs": false
+  },
+  "60_control__if": {
+    "stdout": "x is greater than y\nx does not equal y\nSystem is ready\nx is positive\nx is between 1 and 100\ny is positive\nx is positive and greater than y",
+    "tags": [
+      "simple",
+      "no-io",
+      "no-input"
+    ],
+    "has_inputs": false
+  },
+  "62_control__for": {
+    "stdout": "Example 1: i from 1 to 5 (inclusive)\ni = 1\ni = 2\ni = 3\ni = 4\ni = 5\nExample 2: i from  2 + 1 to (10 DIV 2) + 3\ni = 3\ni = 4\ni = 5\ni = 6\ni = 7\ni = 8\nExample 3: runs once (value1 = value2)\nThis executes once; i = 3\nExample 4: does not execute (value1 > value2)\nExample 5: nested loops\nOuter i = 1\n  Inner j = 1\n  Inner j = 2\nOuter i = 2\n  Inner j = 1\n  Inner j = 2\nOuter i = 3\n  Inner j = 1\n  Inner j = 2\nExample 6: fill nums[1..5] with squares and sum them\nSum of squares = 55",
+    "tags": [
+      "simple",
+      "no-io",
+      "no-input"
+    ],
+    "has_inputs": false
+  },
+  "64_control__while": {
+    "stdout": "counter = 0\ncounter = 1\ncounter = 2\ncounter = 3\ncounter = 4",
+    "tags": [
+      "simple",
+      "no-io",
+      "no-input"
+    ],
+    "has_inputs": false
+  },
+  "70_subprograms__procedures": {
+    "stdout": "Hello from a procedure with no parameters.\nSum of 5 and 7 is 12\nSum of 10 and 25 is 35\nHello Alice (A).\nHello Bob (B).",
+    "tags": [
+      "simple",
+      "no-io",
+      "no-input"
+    ],
+    "has_inputs": false
+  },
+  "71_subprograms__functions": {
+    "stdout": "a = 5, b = 12\nAdd(a, b) = 17\nSquare(a) = 25\nFive() = 5\nMax(a, b) = 12\nAdd(a,b) + Square(Five()) = 42",
+    "tags": [
+      "simple",
+      "no-io",
+      "no-input"
+    ],
+    "has_inputs": false
+  },
+  "72_subprograms__recursion_factorial": {
+    "stdout": "Factorial(5)=120",
+    "tags": [
+      "simple",
+      "no-io",
+      "no-input"
+    ],
+    "has_inputs": false
+  },
+  "90_scope__global_basic": {
+    "stdout": "x=10\ny=15",
+    "tags": [
+      "simple",
+      "no-io",
+      "no-input"
+    ],
+    "has_inputs": false
+  },
+  "91_scope__function_param_shadows_global": {
+    "stdout": "y=101\nglobal x=5",
+    "tags": [
+      "simple",
+      "no-io",
+      "no-input"
+    ],
+    "has_inputs": false
+  },
+  "92_scope__procedure_locals": {
+    "stdout": "inside P g=2\nglobal g=1",
+    "tags": [
+      "simple",
+      "no-io",
+      "no-input"
+    ],
+    "has_inputs": false
+  },
+  "93_scope__property_vs_global_name": {
+    "stdout": "Alice",
+    "tags": [
+      "simple",
+      "no-io",
+      "no-input"
+    ],
+    "has_inputs": false
+  },
+  "94_scope__nested_mixed": {
+    "stdout": "r=30\nglobal x=1",
+    "tags": [
+      "simple",
+      "no-io",
+      "no-input"
+    ],
+    "has_inputs": false
+  },
+  "95_types__numeric_promotion_and_division": {
+    "stdout": "r1 = 5\nr2 = 2.5\nq = 2",
+    "tags": [
+      "simple",
+      "no-io",
+      "no-input"
+    ],
+    "has_inputs": false
+  },
+  "96_types__char_string_concat_only": {
+    "stdout": "HelloZ\nZHello",
+    "tags": [
+      "simple",
+      "no-io",
+      "no-input"
+    ],
+    "has_inputs": false
+  },
+  "97_types__date_compare_and_assign": {
+    "stdout": "d1 < d2 = False\nd2 = 25/12/2025",
+    "tags": [
+      "simple",
+      "no-io",
+      "no-input"
+    ],
+    "has_inputs": false
+  },
+  "98_types__call_rules_functions_vs_procedures": {
+    "stdout": "x = 5\nShow: 5",
+    "tags": [
+      "simple",
+      "no-io",
+      "no-input"
+    ],
+    "has_inputs": false
+  },
+  "99_types__lcase_ucase_string_or_char": {
+    "stdout": "hello\nA",
+    "tags": [
+      "simple",
+      "no-io",
+      "no-input"
+    ],
+    "has_inputs": false
+  }
+}

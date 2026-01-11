@@ -1,5 +1,6 @@
 // TEST: relational operators (> < >= <= = <>)
 // EXPECTED: valid
+// BEHAVIOR_CAPTURED_BY_OUTPUT: boolean results of relational comparisons annotated by operator and operands
 
 DECLARE x, y : INTEGER
 DECLARE gt, lt, gte, lte, eq, neq : BOOLEAN

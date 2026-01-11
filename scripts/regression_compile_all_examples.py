@@ -31,7 +31,8 @@ def main(argv: list[str]) -> int:
     # Clear diagnostic file at start of harness run
     clear_diagnostic_file()
     
-    rc_correct = _run("scripts/regression_compile_correct_examples.py")
+    # Use enhanced behavior-validation harness for correct examples
+    rc_correct = _run("scripts/regression_compile_correct_examples_with_output_validation.py")
     rc_incorrect = _run("scripts/regression_compile_incorrect_examples.py")
 
     if rc_correct == 0 and rc_incorrect == 0:

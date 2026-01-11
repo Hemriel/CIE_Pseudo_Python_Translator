@@ -1,5 +1,6 @@
 // TEST: scope (function params shadow globals)
 // EXPECTED: valid
+// BEHAVIOR_CAPTURED_BY_OUTPUT: shadowing behavior via function parameter vs global value, with both printed to demonstrate scope resolution
 
 DECLARE x : INTEGER
 x <- 5

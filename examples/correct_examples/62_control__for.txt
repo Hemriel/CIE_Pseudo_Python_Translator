@@ -1,5 +1,6 @@
 // TEST: FOR loops (bounds, nesting, 0-iteration, array fill)
 // EXPECTED: valid
+// BEHAVIOR_CAPTURED_BY_OUTPUT: loop iteration values, nested loop structure, non-executed loops, and array fill + sum results
 
 DECLARE i : INTEGER
 DECLARE j : INTEGER
