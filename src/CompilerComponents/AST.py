@@ -144,6 +144,37 @@ class ASTNode:
             CodeGenerationReport: Progress events containing UI metadata and `new_code` fragments.
         """
         raise NotImplementedError("Subclasses must implement generate_code method")
+    
+    def _yield_report(self, message: str, code: str = "") -> Generator[CodeGenerationReport, None, None]:
+        """Factory helper to create and yield CodeGenerationReport instances.
+        
+        Reduces boilerplate in generate_code() implementations by centralizing
+        the report creation pattern used throughout the AST.
+        
+        Args:
+            message (str): Action bar message describing what's being generated.
+            code (str): The code fragment to append to the output.
+            
+        Yields:
+            CodeGenerationReport: Single report event with the specified message and code.
+            
+        Example:
+            # Instead of:
+            report = CodeGenerationReport()
+            report.action_bar_message = "Generating variable reference"
+            report.looked_at_tree_node_id = self.unique_id
+            report.new_code = "myvar"
+            yield report
+            
+            # Use:
+            yield from self._yield_report("Generating variable reference", "myvar")
+        """
+        report = CodeGenerationReport()
+        report.action_bar_message = message
+        report.looked_at_tree_node_id = self.unique_id
+        report.new_code = code
+        yield report
+
 
 
 class Expression(ASTNode):
@@ -156,7 +187,7 @@ class Expression(ASTNode):
         Inherits all `ASTNode` attributes.
 
     Methods:
-        generate_code(...): Emits a Python expression fragment (generally no trailing newline).
+        generate_code(...): Generate a Python expression fragment (generally no trailing newline).
 
     Notes:
         Expressions are composed via precedence in the parser (see `Parser.py`).
@@ -189,7 +220,7 @@ class Statement(ASTNode):
         Inherits all `ASTNode` attributes.
 
     Methods:
-        generate_code(...): Emits statement-level Python code (typically includes newlines).
+        generate_code(...): Generate statement-level Python code (typically includes newlines).
     """
 
     def __init__(self, line: int):
@@ -206,7 +237,7 @@ class Assignable(ASTNode):
         Inherits all `ASTNode` attributes.
 
     Methods:
-        generate_code(...): Emits the Python l-value expression.
+        generate_code(...): Generate the Python l-value expression.
 
     Notes:
         The parser enforces assignment targets to be assignable.
@@ -231,7 +262,7 @@ class Literal(Expression):
         python_source() -> str:
             Formats the literal as Python source text for labels/UI.
         generate_code(indent: str = "") -> Generator[CodeGenerationReport, None, None]:
-            Emits the Python literal (quoted/converted as needed).
+            Generate the literal as Python source text for labels/UI.
 
     Notes:
         `python_source()` exists for places that need a compact Python-formatted literal string
@@ -239,13 +270,6 @@ class Literal(Expression):
     """
 
     def __init__(self, lit_type: TokenType, value: str, line: int):
-        """
-        Initialize the Literal instance.
-
-        Args:
-            type (TokenType): The type of the literal ("INTEGER", "REAL", "CHAR", "STRING", "BOOLEAN", "DATE").
-            value: The value of the literal.
-        """
         super().__init__(line)
         self.type = LITERAL_TYPES.get(lit_type, "unknown")
         self.value = value
@@ -283,15 +307,9 @@ class Literal(Expression):
     def generate_code(self, indent = "", with_type=False) -> Generator[CodeGenerationReport, None, None]:
         """Yield code-generation events for this literal.
 
-        Args:
-            indent (str): Unused for expressions (kept for API consistency).
-
         Yields:
             CodeGenerationReport: Events containing the literal source fragment.
         """
-        report = CodeGenerationReport()
-        report.action_bar_message = f"Generating code for literal: {self.value}"
-        report.looked_at_tree_node_id = self.unique_id
         new_code = ""
         if self.type == "STRING":
             new_code = f'"{self.value}"'
@@ -303,11 +321,10 @@ class Literal(Expression):
             new_code = "False"
         elif self.type == "DATE":
             new_code = f'"{self.value}"'
-        # Else for INTEGER, REAL
-        else: 
-            new_code = self.value    
-        report.new_code = new_code
-        yield report
+        else:  # INTEGER, REAL
+            new_code = self.value
+        
+        yield from self._yield_report(f"Generating code for literal: {self.value}", new_code)
 
 
 class Variable(Expression, Assignable):
@@ -322,20 +339,13 @@ class Variable(Expression, Assignable):
 
     Methods:
         generate_code(indent: str = "", with_type: bool = False) -> Generator[CodeGenerationReport, None, None]:
-            Emits the identifier name, optionally with a Python type annotation.
+            Generate the identifier name, optionally with a Python type annotation.
 
     Notes:
         This node is also an `Assignable` so it can be used as an assignment target.
     """
 
     def __init__(self, name: str, line: int, type: str = "unknown"):
-        """
-        Initialize the Variable instance.
-
-        Args:
-            name (str): The name of the variable.
-            type (str): The type of the variable (default is "unknown").
-        """
         super().__init__(line)
         self.name = name
         self.type = type
@@ -347,19 +357,15 @@ class Variable(Expression, Assignable):
         """Yield code-generation events for this variable reference.
 
         Args:
-            indent (str): Unused for expressions (kept for API consistency).
             with_type (bool): When True, include a Python type annotation.
 
         Yields:
             CodeGenerationReport: Events containing identifier fragments.
         """
-        report = CodeGenerationReport()
-        report.action_bar_message = f"Generating code for variable: {self.name}"
-        report.looked_at_tree_node_id = self.unique_id
-        report.new_code = self.name
+        code = self.name
         if with_type and self.type != "unknown" and "ARRAY" not in self.type:
-            report.new_code += f": {CIE_TO_PYTHON_TYPE_MAP.get(self.type, self.type)}"
-        yield report
+            code += f": {CIE_TO_PYTHON_TYPE_MAP.get(self.type, self.type)}"
+        yield from self._yield_report(f"Generating code for variable: {self.name}", code)
 
     def __repr__(self):
         return f"VariableNode({self.name})"
@@ -377,17 +383,10 @@ class Argument(Expression):
 
     Methods:
         generate_code(indent: str = "", with_type: bool = False) -> Generator[CodeGenerationReport, None, None]:
-            Emits the parameter name, optionally with a Python type annotation.
+            Generate the parameter name, optionally with a Python type annotation.
     """
 
     def __init__(self, name: str, arg_type: str, line: int):
-        """
-        Initialize the Argument instance.
-
-        Args:
-            name (str): The name of the argument.
-            arg_type (str): The type of the argument.
-        """
         super().__init__(line)
         self.name = name
         self.arg_type = arg_type
@@ -399,19 +398,15 @@ class Argument(Expression):
         """Yield code-generation events for this parameter.
 
         Args:
-            indent (str): Unused for expressions (kept for API consistency).
             with_type (bool): When True, include a Python type annotation.
 
         Yields:
             CodeGenerationReport: Events containing parameter fragments.
         """
-        report = CodeGenerationReport()
-        report.action_bar_message = f"Generating code for argument: {self.name}"
-        report.looked_at_tree_node_id = self.unique_id
-        report.new_code = self.name
+        code = self.name
         if with_type and self.arg_type != "unknown" and "ARRAY" not in self.arg_type:
-            report.new_code += f": {CIE_TO_PYTHON_TYPE_MAP.get(self.arg_type, self.arg_type)}"
-        yield report
+            code += f": {CIE_TO_PYTHON_TYPE_MAP.get(self.arg_type, self.arg_type)}"
+        yield from self._yield_report(f"Generating code for argument: {self.name}", code)
 
     def __repr__(self):
         return f"ArgumentNode({self.name}, {self.arg_type})"
@@ -431,7 +426,7 @@ class VariableDeclaration(Statement):
 
     Methods:
         generate_code(indent: str = "") -> Generator[CodeGenerationReport, None, None]:
-            Emits Python assignments with default initialization for each declared variable.
+            Generate Python assignments with default initialization for each declared variable.
 
     Notes:
         This compiler initializes declared variables to a default value (see `default_value_for_type`).
@@ -444,14 +439,6 @@ class VariableDeclaration(Statement):
         line: int,
         is_constant: bool = False,
     ):
-        """
-        Initialize the VariableDeclaration instance.
-
-        Args:
-            var_type (str): The type of the variables.
-            variables (List[Variable]): The list of variables being declared.
-            line (int): The line number in the source file.
-        """
         super().__init__(line)
         self.variables = variables
         self.is_constant = is_constant
@@ -474,12 +461,9 @@ class VariableDeclaration(Statement):
             CodeGenerationReport: One event per declared variable assignment.
         """
         for variable in self.variables:
-            report = CodeGenerationReport()
-            report.action_bar_message = f"Generating code for variable declaration: {variable.name}"
-            report.looked_at_tree_node_id = self.unique_id
             default_value = default_value_for_type(self.var_type)
-            report.new_code = f"{indent}{variable.name} : {CIE_TO_PYTHON_TYPE_MAP.get(self.var_type, self.var_type)} = {default_value}\n"
-            yield report
+            code = f"{indent}{variable.name} : {CIE_TO_PYTHON_TYPE_MAP.get(self.var_type, self.var_type)} = {default_value}\n"
+            yield from self._yield_report(f"Generating code for variable declaration: {variable.name}", code)
 
     def __repr__(self):
         return f"VarDeclNode({self.var_type}, {self.variables}, line {self.line})"
@@ -496,7 +480,7 @@ class Bounds(ASTNode):
         upper_bound (Expression): Upper bound expression.
 
     Methods:
-        generate_code(...): Emits the two bound expressions separated by a comma.
+        generate_code(...): Generate the two bound expressions separated by a comma.
 
     Notes:
         For arrays with non-1 lower bounds, the code generator stores bound metadata
@@ -509,13 +493,6 @@ class Bounds(ASTNode):
         upper_bound: Expression,
         line: int,
     ):
-        """
-        Initialize the Bounds instance.
-
-        Args:
-            lower_bound (Expression): The lower bound expression.
-            upper_bound (Expression): The upper bound expression.
-        """
         super().__init__(line)
         self.lower_bound = lower_bound
         self.upper_bound = upper_bound
@@ -527,31 +504,18 @@ class Bounds(ASTNode):
     def generate_code(self, indent = "") -> Generator[CodeGenerationReport, None, None]:
         """Yield code-generation events for this bounds pair.
 
-        Args:
-            indent (str): Unused here (kept for API consistency).
-
         Yields:
             CodeGenerationReport: Events for lower bound, separator, and upper bound.
         """
         # Generate code for lower bound
-        report_lower = CodeGenerationReport()
-        report_lower.action_bar_message = "Generating code for lower bound..."
-        report_lower.looked_at_tree_node_id = self.lower_bound.unique_id
-        yield report_lower
+        yield from self._yield_report("Generating code for lower bound...")
         yield from self.lower_bound.generate_code()
 
         # Generate comma separator
-        report_comma = CodeGenerationReport()
-        report_comma.action_bar_message = "Generating code for bounds separator"
-        report_comma.looked_at_tree_node_id = self.unique_id
-        report_comma.new_code = ", "
-        yield report_comma
+        yield from self._yield_report("Generating code for bounds separator", ", ")
 
         # Generate code for upper bound
-        report_upper = CodeGenerationReport()
-        report_upper.action_bar_message = "Generating code for upper bound..."
-        report_upper.looked_at_tree_node_id = self.upper_bound.unique_id
-        yield report_upper
+        yield from self._yield_report("Generating code for upper bound...")
         yield from self.upper_bound.generate_code()
 
 
@@ -583,14 +547,6 @@ class OneArrayDeclaration(Statement):
         line: int,
         is_constant: bool = False,
     ):
-        """
-        Initialize the ArrayDeclaration instance.
-
-        Args:
-            var_type (str): The type of the array elements.
-            variable (Variable): The array variable being declared.
-            bounds (Bounds): The bounds of the array.
-        """
         super().__init__(line)
         self.var_type = var_type
         self.variable = variables
@@ -663,15 +619,6 @@ class TwoArrayDeclaration(Statement):
         line: int,
         is_constant: bool = False,
     ):
-        """
-        Initialize the TwoArrayDeclaration instance.
-
-        Args:
-            var_type (str): The type of the array elements.
-            variable (Variable): The array variable being declared.
-            bounds1 (Bounds): The bounds of the first dimension.
-            bounds2 (Bounds): The bounds of the second dimension.
-        """
         super().__init__(line)
         self.var_type = var_type
         self.variable = variables
@@ -721,7 +668,7 @@ class TwoArrayDeclaration(Statement):
             report.looked_at_tree_node_id = self.unique_id
             report.new_code = ", "
             yield report
-            yield from self.bounds1.upper_bound.generate_code()
+            yield from self.bounds2.upper_bound.generate_code()
             report = CodeGenerationReport()
             report.action_bar_message = f"Generating code for 2D array declaration: {variable.name} (close)"
             report.looked_at_tree_node_id = self.unique_id
@@ -749,14 +696,6 @@ class OneArrayAccess(Expression, Assignable):
     """
 
     def __init__(self, array: Expression, index: Expression, line: int):
-        """
-        Initialize the ArrayAccess instance.
-
-        Args:
-            array (Variable): The array variable being accessed.
-            index (Expression): The index expression.
-            line (int): The line number in the source file.
-        """
         super().__init__(line)
         self.array = array
         self.index = index
@@ -792,23 +731,11 @@ class OneArrayAccess(Expression, Assignable):
             return
 
         tmp_name = f"CIE_TMP_{self.unique_id}"
-        report = CodeGenerationReport()
-        report.action_bar_message = "Generating code for 1D array access (capturing base)"
-        report.looked_at_tree_node_id = self.unique_id
-        report.new_code = f"(({tmp_name} := "
-        yield report
+        yield from self._yield_report("Generating code for 1D array access (capturing base)", f"(({tmp_name} := ")
         yield from self.array.generate_code()
-        report = CodeGenerationReport()
-        report.action_bar_message = "Generating code for 1D array access (indexing)"
-        report.looked_at_tree_node_id = self.unique_id
-        report.new_code = ")["
-        yield report
+        yield from self._yield_report("Generating code for 1D array access (indexing)", ")[")
         yield from self.index.generate_code()
-        report = CodeGenerationReport()
-        report.action_bar_message = "Generating code for 1D array access (close)"
-        report.looked_at_tree_node_id = self.unique_id
-        report.new_code = "])"
-        yield report
+        yield from self._yield_report("Generating code for 1D array access (close)", "])")
 
     def __repr__(self):
         return f"ArrayAccessNode({self.array}, {self.index}, line {self.line})"
@@ -837,15 +764,6 @@ class TwoArrayAccess(Expression, Assignable):
     def __init__(
         self, array: Expression, index1: Expression, index2: Expression, line: int
     ):
-        """
-        Initialize the TwoArrayAccess instance.
-
-        Args:
-            array (Variable): The array variable being accessed.
-            index1 (Expression): The first index expression.
-            index2 (Expression): The second index expression.
-            line (int): The line number in the source file.
-        """
         super().__init__(line)
         self.array = array
         self.index1 = index1
@@ -887,29 +805,13 @@ class TwoArrayAccess(Expression, Assignable):
             return
 
         tmp_name = f"CIE_TMP_{self.unique_id}"
-        report = CodeGenerationReport()
-        report.action_bar_message = "Generating code for 2D array access (capturing base)"
-        report.looked_at_tree_node_id = self.unique_id
-        report.new_code = f"(({tmp_name} := "
-        yield report
+        yield from self._yield_report("Generating code for 2D array access (capturing base)", f"(({tmp_name} := ")
         yield from self.array.generate_code()
-        report = CodeGenerationReport()
-        report.action_bar_message = "Generating code for 2D array access (indexing)"
-        report.looked_at_tree_node_id = self.unique_id
-        report.new_code = ")["
-        yield report
+        yield from self._yield_report("Generating code for 2D array access (indexing)", ")[")
         yield from self.index1.generate_code()
-        report = CodeGenerationReport()
-        report.action_bar_message = "Generating code for 2D array access (comma)"
-        report.looked_at_tree_node_id = self.unique_id
-        report.new_code = ", "
-        yield report
+        yield from self._yield_report("Generating code for 2D array access (comma)", ", ")
         yield from self.index2.generate_code()
-        report = CodeGenerationReport()
-        report.action_bar_message = "Generating code for 2D array access (close)"
-        report.looked_at_tree_node_id = self.unique_id
-        report.new_code = "])"
-        yield report
+        yield from self._yield_report("Generating code for 2D array access (close)", "])")
 
     def __repr__(self):
         return f"TwoArrayAccessNode({self.array}, {self.index1}, {self.index2}, line {self.line})"
@@ -933,14 +835,6 @@ class PropertyAccess(Expression, Assignable):
     """
 
     def __init__(self, variable: Expression, property: Variable, line: int):
-        """
-        Initialize the PropertyAccess instance.
-
-        Args:
-            variable (Variable): The variable being accessed.
-            property (Variable): The property name being accessed.
-            line (int): The line number in the source file.
-        """
         super().__init__(line)
         self.variable = variable
         self.property = property
@@ -952,18 +846,11 @@ class PropertyAccess(Expression, Assignable):
     def generate_code(self, indent="") -> Generator[CodeGenerationReport, None, None]:
         """Yield code-generation events for this access expression.
 
-        Args:
-            indent (str): Unused for expressions (kept for API consistency).
-
         Yields:
             CodeGenerationReport: Events containing expression fragments.
         """
         yield from self.variable.generate_code()
-        report = CodeGenerationReport()
-        report.action_bar_message = f"Generating code for property access: {self.property.name}"
-        report.looked_at_tree_node_id = self.unique_id
-        report.new_code = f"."
-        yield report
+        yield from self._yield_report(f"Generating code for property access: {self.property.name}", f".")
         yield from self.property.generate_code()
 
     def __repr__(self):
@@ -990,14 +877,6 @@ class CompositeDataType(Statement):
     """
 
     def __init__(self, name: str, fields: list[Variable], line: int):
-        """
-        Initialize the CompositeDataType instance.
-
-        Args:
-            name (str): The name of the composite data type.
-            fields (list[Variable]): A list of Variables representing the fields.
-            line (int): The line number in the source file.
-        """
         super().__init__(line)
         self.name = name
         self.fields = fields
@@ -1015,11 +894,7 @@ class CompositeDataType(Statement):
         Yields:
             CodeGenerationReport: Events containing statement fragments.
         """
-        report = CodeGenerationReport()
-        report.action_bar_message = f"Generating code for composite data type: {self.name}"
-        report.looked_at_tree_node_id = self.unique_id
-        report.new_code = f"{indent}class {self.name}:\n{indent}    def __init__(self):\n"
-        yield report
+        yield from self._yield_report(f"Generating code for composite data type: {self.name}", f"{indent}class {self.name}:\n{indent}    def __init__(self):\n")
         for field_name in self.fields:
             report = CodeGenerationReport()
             report.action_bar_message = f"Generating code for field: {field_name.name} in composite data type: {self.name}"
@@ -1043,14 +918,6 @@ class RightStringMethod(Expression):
     """
 
     def __init__(self, string_expr: Expression, count_expr: Expression, line: int):
-        """
-        Initialize the RightStringMethod instance.
-
-        Args:
-            string_expr (Expression): The string expression.
-            count_expr (Expression): The count expression.
-            line (int): The line number in the source file.
-        """
         super().__init__(line)
         self.string_expr = string_expr
         self.count_expr = count_expr
@@ -1062,29 +929,14 @@ class RightStringMethod(Expression):
     def generate_code(self, indent="") -> Generator[CodeGenerationReport, None, None]:
         """Yield code-generation events for RIGHT(...).
 
-        Args:
-            indent (str): Unused for expressions (kept for API consistency).
-
         Yields:
             CodeGenerationReport: Events containing slice expression fragments.
         """
-        report = CodeGenerationReport()
-        report.action_bar_message = "Generating code for RIGHT string method..."
-        report.looked_at_tree_node_id = self.unique_id
-        report.new_code = f"("
-        yield report
+        yield from self._yield_report("Generating code for RIGHT string method...", f"(")
         yield from self.string_expr.generate_code()
-        report = CodeGenerationReport()
-        report.action_bar_message = "Generating code for RIGHT string method (adding slice)..."
-        report.looked_at_tree_node_id = self.unique_id
-        report.new_code = "[-"
-        yield report
+        yield from self._yield_report("Generating code for RIGHT string method (adding slice)...", "[-")
         yield from self.count_expr.generate_code()
-        report = CodeGenerationReport()
-        report.action_bar_message = "Finalizing code for RIGHT string method..."
-        report.looked_at_tree_node_id = self.unique_id
-        report.new_code = ":])"
-        yield report
+        yield from self._yield_report("Finalizing code for RIGHT string method...", ":])")
 
     def __repr__(self):
         return f"RightStringMethodNode({self.string_expr}, {self.count_expr}, line {self.line})"
@@ -1104,13 +956,6 @@ class LengthStringMethod(Expression):
     """
 
     def __init__(self, string_expr: Expression, line: int):
-        """
-        Initialize the LengthStringMethod instance.
-
-        Args:
-            string_expr (Expression): The string expression.
-            line (int): The line number in the source file.
-        """
         super().__init__(line)
         self.string_expr = string_expr
         self.edges = [string_expr]  # type: ignore
@@ -1121,23 +966,12 @@ class LengthStringMethod(Expression):
     def generate_code(self, indent="") -> Generator[CodeGenerationReport, None, None]:
         """Yield code-generation events for LENGTH(...).
 
-        Args:
-            indent (str): Unused for expressions (kept for API consistency).
-
         Yields:
             CodeGenerationReport: Events containing `len(...)` fragments.
         """
-        report = CodeGenerationReport()
-        report.action_bar_message = "Generating code for LENGTH string method..."
-        report.looked_at_tree_node_id = self.unique_id
-        report.new_code = f"(len("
-        yield report
+        yield from self._yield_report("Generating code for LENGTH string method...", "(len(")
         yield from self.string_expr.generate_code()
-        report = CodeGenerationReport()
-        report.action_bar_message = "Finalizing code for LENGTH string method..."
-        report.looked_at_tree_node_id = self.unique_id
-        report.new_code = "))"
-        yield report
+        yield from self._yield_report("Finalizing code for LENGTH string method...", "))")
 
     def __repr__(self):
         return f"LengthStringMethodNode({self.string_expr}, line {self.line})"
@@ -1165,15 +999,6 @@ class MidStringMethod(Expression):
         length_expr: Expression,
         line: int,
     ):
-        """
-        Initialize the MidStringMethod instance.
-
-        Args:
-            string_expr (Expression): The string expression.
-            start_expr (Expression): The start index expression.
-            length_expr (Expression): The length expression.
-            line (int): The line number in the source file.
-        """
         super().__init__(line)
         self.string_expr = string_expr
         self.start_expr = start_expr
@@ -1186,41 +1011,18 @@ class MidStringMethod(Expression):
     def generate_code(self, indent="") -> Generator[CodeGenerationReport, None, None]:
         """Yield code-generation events for MID(...).
 
-        Args:
-            indent (str): Unused for expressions (kept for API consistency).
-
         Yields:
             CodeGenerationReport: Events containing slice expression fragments.
         """
-        report = CodeGenerationReport()
-        report.action_bar_message = "Generating code for MID string method..."
-        report.looked_at_tree_node_id = self.unique_id
-        report.new_code = f"("
-        yield report
+        yield from self._yield_report("Generating code for MID string method...", f"(")
         yield from self.string_expr.generate_code()
-        report = CodeGenerationReport()
-        report.action_bar_message = "Generating code for MID string method (adding slice)..."
-        report.looked_at_tree_node_id = self.unique_id
-        report.new_code = "[("
-        yield report
+        yield from self._yield_report("Generating code for MID string method (adding slice)...", "[(")
         yield from self.start_expr.generate_code()
-        report = CodeGenerationReport()
-        report.action_bar_message = "Generating code for MID string method (adjusting start index)..."
-        report.looked_at_tree_node_id = self.unique_id
-        report.new_code = " - 1):("
-        yield report
+        yield from self._yield_report("Generating code for MID string method (adjusting start index)...", " - 1):(")
         yield from self.start_expr.generate_code()
-        report = CodeGenerationReport()
-        report.action_bar_message = "Generating code for MID string method (adding length)..."
-        report.looked_at_tree_node_id = self.unique_id
-        report.new_code = "+"
-        yield report
+        yield from self._yield_report("Generating code for MID string method (adding length)...", "+")
         yield from self.length_expr.generate_code()
-        report = CodeGenerationReport()
-        report.action_bar_message = "Finalizing code for MID string method..."
-        report.looked_at_tree_node_id = self.unique_id
-        report.new_code = " -1)])"
-        yield report
+        yield from self._yield_report("Finalizing code for MID string method...", " -1)])")
 
     def __repr__(self):
         return f"MidStringMethodNode({self.string_expr}, {self.start_expr}, {self.length_expr}, line {self.line})"
@@ -1243,13 +1045,6 @@ class LowerStringMethod(Expression):
     """
 
     def __init__(self, string_expr: Expression, line: int):
-        """
-        Initialize the LowerStringMethod instance.
-
-        Args:
-            string_expr (Expression): The string expression.
-            line (int): The line number in the source file.
-        """
         super().__init__(line)
         self.string_expr = string_expr
         self.edges = [string_expr]  # type: ignore
@@ -1260,23 +1055,12 @@ class LowerStringMethod(Expression):
     def generate_code(self, indent="") -> Generator[CodeGenerationReport, None, None]:
         """Yield code-generation events for LCASE(...).
 
-        Args:
-            indent (str): Unused for expressions (kept for API consistency).
-
         Yields:
             CodeGenerationReport: Events containing `.lower()` fragments.
         """
-        report = CodeGenerationReport()
-        report.action_bar_message = "Generating code for LCASE string method..."
-        report.looked_at_tree_node_id = self.unique_id
-        report.new_code = f"("
-        yield report
+        yield from self._yield_report("Generating code for LCASE string method...", f"(")
         yield from self.string_expr.generate_code()
-        report = CodeGenerationReport()
-        report.action_bar_message = "Finalizing code for LCASE string method..."
-        report.looked_at_tree_node_id = self.unique_id
-        report.new_code = ".lower())"
-        yield report
+        yield from self._yield_report("Finalizing code for LCASE string method...", ".lower())")
 
     def __repr__(self):
         return f"LowerStringMethodNode({self.string_expr}, line {self.line})"
@@ -1299,13 +1083,6 @@ class UpperStringMethod(Expression):
     """
 
     def __init__(self, string_expr: Expression, line: int):
-        """
-        Initialize the UpperStringMethod instance.
-
-        Args:
-            string_expr (Expression): The string expression.
-            line (int): The line number in the source file.
-        """
         super().__init__(line)
         self.string_expr = string_expr
         self.edges = [string_expr]  # type: ignore
@@ -1316,23 +1093,12 @@ class UpperStringMethod(Expression):
     def generate_code(self, indent="") -> Generator[CodeGenerationReport, None, None]:
         """Yield code-generation events for UCASE(...).
 
-        Args:
-            indent (str): Unused for expressions (kept for API consistency).
-
         Yields:
             CodeGenerationReport: Events containing `.upper()` fragments.
         """
-        report = CodeGenerationReport()
-        report.action_bar_message = "Generating code for UCASE string method..."
-        report.looked_at_tree_node_id = self.unique_id
-        report.new_code = f"("
-        yield report
+        yield from self._yield_report("Generating code for UCASE string method...", f"(")
         yield from self.string_expr.generate_code()
-        report = CodeGenerationReport()
-        report.action_bar_message = "Finalizing code for UCASE string method..."
-        report.looked_at_tree_node_id = self.unique_id
-        report.new_code = ".upper())"
-        yield report
+        yield from self._yield_report("Finalizing code for UCASE string method...", ".upper())")
 
     def __repr__(self):
         return f"UpperStringMethodNode({self.string_expr}, line {self.line})"
@@ -1352,13 +1118,6 @@ class IntCastMethod(Expression):
     """
 
     def __init__(self, expr: Expression, line: int):
-        """
-        Initialize the IntCastMethod instance.
-
-        Args:
-            expr (Expression): The expression to cast.
-            line (int): The line number in the source file.
-        """
         super().__init__(line)
         self.expr = expr
         self.edges = [expr]  # type: ignore
@@ -1369,23 +1128,12 @@ class IntCastMethod(Expression):
     def generate_code(self, indent="") -> Generator[CodeGenerationReport, None, None]:
         """Yield code-generation events for INT(...).
 
-        Args:
-            indent (str): Unused for expressions (kept for API consistency).
-
         Yields:
             CodeGenerationReport: Events containing `int(...)` fragments.
         """
-        report = CodeGenerationReport()
-        report.action_bar_message = "Generating code for INT cast method..."
-        report.looked_at_tree_node_id = self.unique_id
-        report.new_code = f"(int("
-        yield report
+        yield from self._yield_report("Generating code for INT cast method...", f"(int(")
         yield from self.expr.generate_code()
-        report = CodeGenerationReport()
-        report.action_bar_message = "Finalizing code for INT cast method..."
-        report.looked_at_tree_node_id = self.unique_id
-        report.new_code = "))"
-        yield report
+        yield from self._yield_report("Finalizing code for INT cast method...", "))")
 
     def __repr__(self):
         return f"IntCastMethodNode({self.expr}, line {self.line})"
@@ -1408,13 +1156,6 @@ class RandomRealMethod(Expression):
     """
 
     def __init__(self, high_expr: Expression, line: int):
-        """
-        Initialize the RandomRealMethod instance.
-
-        Args:
-            high_expr (Expression): The high bound expression.
-            line (int): The line number in the source file.
-        """
         super().__init__(line)
         self.high_expr = high_expr
         self.edges = [high_expr]  # type: ignore
@@ -1425,23 +1166,12 @@ class RandomRealMethod(Expression):
     def generate_code(self, indent="") -> Generator[CodeGenerationReport, None, None]:
         """Yield code-generation events for RAND(...).
 
-        Args:
-            indent (str): Unused for expressions (kept for API consistency).
-
         Yields:
             CodeGenerationReport: Events containing `uniform(0, ...)` fragments.
         """
-        report = CodeGenerationReport()
-        report.action_bar_message = "Generating code for RAND method..."
-        report.looked_at_tree_node_id = self.unique_id
-        report.new_code = f"(uniform(0, "
-        yield report
+        yield from self._yield_report("Generating code for RAND method...", f"(uniform(0, ")
         yield from self.high_expr.generate_code()
-        report = CodeGenerationReport()
-        report.action_bar_message = "Finalizing code for RAND method..."
-        report.looked_at_tree_node_id = self.unique_id
-        report.new_code = "))"
-        yield report
+        yield from self._yield_report("Finalizing code for RAND method...", "))")
 
     def __repr__(self):
         return f"RandomRealMethodNode({self.high_expr}, line {self.line})"
@@ -1464,13 +1194,6 @@ class InputStatement(Statement):
     """
 
     def __init__(self, variable: Variable, line: int):
-        """
-        Initialize the InputStatement instance.
-
-        Args:
-            variable (Variable): The variable to store the input.
-            line (int): The line number in the source file.
-        """
         super().__init__(line)
         self.variable = variable
         self.edges = [variable]  # type: ignore
@@ -1487,11 +1210,7 @@ class InputStatement(Statement):
         Yields:
             CodeGenerationReport: Event containing the assignment to `InputAndConvert()`.
         """
-        report = CodeGenerationReport()
-        report.action_bar_message = f"Generating code for input statement: {self.variable.name}"
-        report.looked_at_tree_node_id = self.unique_id
-        report.new_code = f"{indent}{self.variable.name} = InputAndConvert() #type: ignore to adapt CIE input function\n"
-        yield report
+        yield from self._yield_report(f"Generating code for input statement: {self.variable.name}", f"{indent}{self.variable.name} = InputAndConvert() #type: ignore to adapt CIE input function\n")
 
     def __repr__(self):
         return f"InputStmtNode({self.variable}, line {self.line})"
@@ -1512,12 +1231,6 @@ class OutputStatement(Statement):
     """
 
     def __init__(self, expressions: list[Expression], line: int):
-        """
-        Initialize the OutputStatement instance.
-        Args:
-            expressions (List[Expression]): The list of expressions to output.
-            line (int): The line number in the source file.
-        """
         super().__init__(line)
         self.expressions = expressions
         self.edges = expressions  # type: ignore
@@ -1534,11 +1247,7 @@ class OutputStatement(Statement):
         Yields:
             CodeGenerationReport: Events forming a `print(...)` call.
         """
-        report = CodeGenerationReport()
-        report.action_bar_message = "Generating code for output statement..."
-        report.looked_at_tree_node_id = self.unique_id
-        report.new_code = f"{indent}print(str("
-        yield report
+        yield from self._yield_report("Generating code for output statement...", f"{indent}print(str(")
         for i, expr in enumerate(self.expressions):
             if i > 0:
                 report = CodeGenerationReport()
@@ -1547,11 +1256,7 @@ class OutputStatement(Statement):
                 report.new_code = ") + str("
                 yield report
             yield from expr.generate_code()
-        report = CodeGenerationReport()
-        report.action_bar_message = "Finishing code for output statement..."
-        report.looked_at_tree_node_id = self.unique_id
-        report.new_code = "))\n"
-        yield report
+        yield from self._yield_report("Finishing code for output statement...", "))\n")
 
     def __repr__(self):
         return f"OutputStmtNode({self.expressions}, line {self.line})"
@@ -1578,13 +1283,6 @@ class AssignmentStatement(Statement):
         line: int,
         is_constant_declaration: bool = False,
     ):
-        """
-        Initialize the AssignmentStatement instance.
-        Args:
-            variable (Assignable): The variable being assigned to.
-            expression (Expression): The expression being assigned.
-            line (int): The line number in the source file.
-        """
         super().__init__(line)
         self.variable = variable
         self.expression = expression
@@ -1649,13 +1347,6 @@ class UnaryExpression(Expression):
     """
 
     def __init__(self, operator: str, operand: Expression, line: int):
-        """
-        Initialize the UnaryExpression instance.
-        Args:
-            operator (str): The unary operator.
-            operand (Expression): The operand of the unary operation.
-            line (int): The line number in the source file.
-        """
         super().__init__(line)
         self.operator = operator
         self.operand = operand
@@ -1667,23 +1358,12 @@ class UnaryExpression(Expression):
     def generate_code(self, indent="") -> Generator[CodeGenerationReport, None, None]:
         """Yield code-generation events for this unary expression.
 
-        Args:
-            indent (str): Unused for expressions (kept for API consistency).
-
         Yields:
             CodeGenerationReport: Events forming a parenthesized unary expression.
         """
-        report = CodeGenerationReport()
-        report.action_bar_message = f"Generating code for unary expression: {self.operator} ..."
-        report.looked_at_tree_node_id = self.unique_id
-        report.new_code = f"({operators_map[self.operator]} "
-        yield report
+        yield from self._yield_report(f"Generating code for unary expression: {self.operator} ...", f"({operators_map[self.operator]} ")
         yield from self.operand.generate_code()
-        report = CodeGenerationReport()
-        report.action_bar_message = f"Finishing code for unary expression: {self.operator} ..."
-        report.looked_at_tree_node_id = self.unique_id
-        report.new_code = ")"
-        yield report
+        yield from self._yield_report(f"Finishing code for unary expression: {self.operator} ...", ")")
 
     def __repr__(self):
         return f"UnaryExprNode({self.operator}, {self.operand}, line {self.line})"
@@ -1710,14 +1390,6 @@ class BinaryExpression(Expression):
     """
 
     def __init__(self, left: Expression, operator: str, right: Expression, line: int):
-        """
-        Initialize the BinaryExpression instance.
-        Args:
-            left (Expression): The left operand.
-            operator (str): The binary operator.
-            right (Expression): The right operand.
-            line (int): The line number in the source file.
-        """
         super().__init__(line)
         self.left = left
         self.operator = operator
@@ -1730,17 +1402,10 @@ class BinaryExpression(Expression):
     def generate_code(self, indent="") -> Generator[CodeGenerationReport, None, None]:
         """Yield code-generation events for this binary expression.
 
-        Args:
-            indent (str): Unused for expressions (kept for API consistency).
-
         Yields:
             CodeGenerationReport: Events forming a parenthesized infix expression.
         """
-        report = CodeGenerationReport()
-        report.action_bar_message = f"Generating code for binary expression: ... {self.operator} ..."
-        report.looked_at_tree_node_id = self.unique_id
-        report.new_code = f"("
-        yield report
+        yield from self._yield_report(f"Generating code for binary expression: ... {self.operator} ...", f"(")
         yield from self.left.generate_code()
         report = CodeGenerationReport()
         report.action_bar_message = (
@@ -1781,12 +1446,6 @@ class Condition(Expression):
     """
 
     def __init__(self, expression: Expression, line: int):
-        """
-        Initialize the Condition instance.
-        Args:
-            expression (Expression): The condition expression.
-            line (int): The line number in the source file.
-        """
         super().__init__(line)
         self.expression = expression
         self.edges = [expression]  # type: ignore
@@ -1796,9 +1455,6 @@ class Condition(Expression):
     
     def generate_code(self, indent="") -> Generator[CodeGenerationReport, None, None]:
         """Yield code-generation events for this condition.
-
-        Args:
-            indent (str): Unused for expressions (kept for API consistency).
 
         Yields:
             CodeGenerationReport: Events from the underlying expression.
@@ -1834,14 +1490,6 @@ class IfStatement(Statement):
         line: int,
         else_branch: Statements | None = None,
     ):
-        """
-        Initialize the IfStatement instance.
-        Args:
-            condition (Condition): The condition expression.
-            then_branch (Statements): The statements to execute if the condition is true.
-            else_branch (Statements, optional): The statements to execute if the condition is false.
-            line (int): The line number in the source file.
-        """
         super().__init__(line)
         self.condition = condition
         self.then_branch = then_branch
@@ -1864,17 +1512,9 @@ class IfStatement(Statement):
         Yields:
             CodeGenerationReport: Events forming `if ...:` and optional `else:` blocks.
         """
-        report = CodeGenerationReport()
-        report.action_bar_message = "Generating code for if statement..."
-        report.looked_at_tree_node_id = self.unique_id
-        report.new_code = f"{indent}if "
-        yield report
+        yield from self._yield_report("Generating code for if statement...", f"{indent}if ")
         yield from self.condition.generate_code()
-        report = CodeGenerationReport()
-        report.action_bar_message = "Generating code for if statement (then branch)..."
-        report.looked_at_tree_node_id = self.unique_id
-        report.new_code = f":\n"
-        yield report
+        yield from self._yield_report("Generating code for if statement (then branch)...", f":\n")
         yield from self.then_branch.generate_code(indent + "    ")
         if self.else_branch:
             report = CodeGenerationReport()
@@ -1908,13 +1548,6 @@ class CaseStatement(Statement):
     """
 
     def __init__(self, variable: Variable, cases: dict[Literal, Statements], line: int):
-        """
-        Initialize the CaseStatement instance.
-        Args:
-            variable (Variable): The variable being evaluated.
-            cases (dict[Literal, Statements]): A dictionary mapping case values to their corresponding statements.
-            line (int): The line number in the source file.
-        """
         super().__init__(line)
         self.variable = variable
         self.cases = cases
@@ -1948,17 +1581,9 @@ class CaseStatement(Statement):
         Yields:
             CodeGenerationReport: Events forming a Python `match` statement.
         """
-        report = CodeGenerationReport()
-        report.action_bar_message = "Generating code for case statement..."
-        report.looked_at_tree_node_id = self.unique_id
-        report.new_code = f"{indent}match "
-        yield report
+        yield from self._yield_report("Generating code for case statement...", f"{indent}match ")
         yield from self.variable.generate_code()
-        report = CodeGenerationReport()
-        report.action_bar_message = "Generating code for case statement (cases)..."
-        report.looked_at_tree_node_id = self.unique_id
-        report.new_code = f":\n"
-        yield report
+        yield from self._yield_report("Generating code for case statement (cases)...", f":\n")
         indent += "    "
         for key, statements in self.cases.items():
             if key != "OTHERWISE":
@@ -2006,13 +1631,6 @@ class WhileStatement(Statement):
     """
 
     def __init__(self, condition: Condition, body: Statements, line: int):
-        """
-        Initialize the WhileStatement instance.
-        Args:
-            condition (Condition): The loop condition.
-            body (Statements): The loop body.
-            line (int): The line number in the source file.
-        """
         super().__init__(line)
         self.condition = condition
         self.body = body
@@ -2031,17 +1649,9 @@ class WhileStatement(Statement):
         Yields:
             CodeGenerationReport: Events forming a Python `while` loop.
         """
-        report = CodeGenerationReport()
-        report.action_bar_message = "Generating code for while statement..."
-        report.looked_at_tree_node_id = self.unique_id
-        report.new_code = f"{indent}while "
-        yield report
+        yield from self._yield_report("Generating code for while statement...", f"{indent}while ")
         yield from self.condition.generate_code()
-        report = CodeGenerationReport()
-        report.action_bar_message = "Generating code for while statement (body)..."
-        report.looked_at_tree_node_id = self.unique_id
-        report.new_code = f":\n"
-        yield report
+        yield from self._yield_report("Generating code for while statement (body)...", f":\n")
         yield from self.body.generate_code(indent + "    ")
 
     def __repr__(self):
@@ -2071,14 +1681,6 @@ class ForStatement(Statement):
         body: Statements,
         line: int,
     ):
-        """
-        Initialize the ForStatement instance.
-        Args:
-            loop_variable (Variable): The loop variable.
-            bounds (Bounds): The loop bounds.
-            body (Statements): The loop body.
-            line (int): The line number in the source file.
-        """
         super().__init__(line)
         self.loop_variable = loop_variable
         self.bounds = bounds
@@ -2098,29 +1700,13 @@ class ForStatement(Statement):
         Yields:
             CodeGenerationReport: Events forming a Python `for ... in range(...):` loop.
         """
-        report = CodeGenerationReport()
-        report.action_bar_message = "Generating code for for loop..."
-        report.looked_at_tree_node_id = self.unique_id
-        report.new_code = f"{indent}for "
-        yield report
+        yield from self._yield_report("Generating code for for loop...", f"{indent}for ")
         yield from self.loop_variable.generate_code()
-        report = CodeGenerationReport()
-        report.action_bar_message = "Generating code for for loop (bounds)..."
-        report.looked_at_tree_node_id = self.unique_id
-        report.new_code = f" in range("
-        yield report
+        yield from self._yield_report("Generating code for for loop (bounds)...", f" in range(")
         yield from self.bounds.lower_bound.generate_code()
-        report = CodeGenerationReport()
-        report.action_bar_message = "Generating code for for loop (upper bound)..."
-        report.looked_at_tree_node_id = self.unique_id
-        report.new_code = f", "
-        yield report
+        yield from self._yield_report("Generating code for for loop (upper bound)...", f", ")
         yield from self.bounds.upper_bound.generate_code()
-        report = CodeGenerationReport()
-        report.action_bar_message = "Generating code for for loop (body)..."
-        report.looked_at_tree_node_id = self.unique_id
-        report.new_code = f" + 1):\n"
-        yield report
+        yield from self._yield_report("Generating code for for loop (body)...", f" + 1):\n")
         yield from self.body.generate_code(indent + "    ")
 
     def __repr__(self):
@@ -2145,13 +1731,6 @@ class PostWhileStatement(Statement):
     """
 
     def __init__(self, condition: Condition, body: Statements, line: int):
-        """
-        Initialize the PostWhileStatement instance.
-        Args:
-            condition (Condition): The loop condition.
-            body (Statements): The loop body.
-            line (int): The line number in the source file.
-        """
         super().__init__(line)
         self.condition = condition
         self.body = body
@@ -2170,23 +1749,11 @@ class PostWhileStatement(Statement):
         Yields:
             CodeGenerationReport: Events forming a `while True` + conditional break.
         """
-        report = CodeGenerationReport()
-        report.action_bar_message = "Generating code for post-while statement..."
-        report.looked_at_tree_node_id = self.unique_id
-        report.new_code = f"{indent}while True:\n"
-        yield report
+        yield from self._yield_report("Generating code for post-while statement...", f"{indent}while True:\n")
         yield from self.body.generate_code(indent + "    ")
-        report = CodeGenerationReport()
-        report.action_bar_message = "Generating code for post-while statement (condition)..."
-        report.looked_at_tree_node_id = self.unique_id
-        report.new_code = f"\n{indent}    if "
-        yield report
+        yield from self._yield_report("Generating code for post-while statement (condition)...", f"\n{indent}    if ")
         yield from self.condition.generate_code()
-        report = CodeGenerationReport()
-        report.action_bar_message = "Finalizing code for post-while statement..."
-        report.looked_at_tree_node_id = self.unique_id
-        report.new_code = f":\n{indent}        break\n"
-        yield report
+        yield from self._yield_report("Finalizing code for post-while statement...", f":\n{indent}        break\n")
 
     def __repr__(self):
         return f"PostWhileStmtNode({self.condition}, {self.body}, line {self.line})"
@@ -2206,13 +1773,6 @@ class ReturnType(ASTNode):
     """
 
     def __init__(self, type_name: str, line: int):
-        """
-        Initialize the ReturnType instance.
-
-        Args:
-            type_name (str): The name of the return type.
-            line (int): The line number in the source file.
-        """
         super().__init__(line)
         self.type_name = type_name
 
@@ -2222,17 +1782,10 @@ class ReturnType(ASTNode):
     def generate_code(self, indent="") -> Generator[CodeGenerationReport, None, None]:
         """Yield code-generation events for this return type annotation.
 
-        Args:
-            indent (str): Unused here (kept for API consistency).
-
         Yields:
             CodeGenerationReport: Event containing the mapped Python type name.
         """
-        report = CodeGenerationReport()
-        report.action_bar_message = "Generating code for return type..."
-        report.looked_at_tree_node_id = self.unique_id
-        report.new_code = CIE_TO_PYTHON_TYPE_MAP.get(self.type_name, self.type_name)
-        yield report
+        yield from self._yield_report("Generating code for return type...", CIE_TO_PYTHON_TYPE_MAP.get(self.type_name, self.type_name))
 
     def __repr__(self):
         return f"ReturnTypeNode({self.type_name}, line {self.line})"
@@ -2257,13 +1810,6 @@ class Arguments(ASTNode):
     """
 
     def __init__(self, arguments: list[Argument | Expression], line: int):
-        """
-        Initialize the Argument instance.
-
-        Args:
-            arguments (list[Argument | Expression]): The list of arguments.
-            line (int): The line number in the source file.
-        """
         super().__init__(line)
         self.arguments = arguments
         self.edges = arguments  # type: ignore
@@ -2275,7 +1821,6 @@ class Arguments(ASTNode):
         """Yield code-generation events for a comma-separated argument list.
 
         Args:
-            indent (str): Unused here (kept for API consistency).
             with_type (bool): When True, emit typed parameters (used in definitions).
 
         Yields:
@@ -2336,16 +1881,6 @@ class FunctionDefinition(Statement):
         line: int,
         procedure: bool = False,
     ):
-        """
-        Initialize the FunctionDefinition instance.
-
-        Args:
-            name (str): The name of the Function.
-            parameters (list[Argument]): The list of parameters.
-            return_type (ReturnType | None): The return type of the Function.
-            body (Statements): The body of the Function.
-            line (int): The line number in the source file.
-        """
         super().__init__(line)
         self.name = name
         self.parameters = Arguments(parameters, line)  # type: ignore
@@ -2367,17 +1902,9 @@ class FunctionDefinition(Statement):
         Yields:
             CodeGenerationReport: Events forming a Python `def` and its body.
         """
-        report = CodeGenerationReport()
-        report.action_bar_message = f"Generating code for function definition: {self.name}..."
-        report.looked_at_tree_node_id = self.unique_id
-        report.new_code = f"{indent}def {self.name}("
-        yield report
+        yield from self._yield_report(f"Generating code for function definition: {self.name}...", f"{indent}def {self.name}(")
         yield from self.parameters.generate_code(with_type=True)
-        report = CodeGenerationReport()
-        report.action_bar_message = f"Generating code for function definition: {self.name} (type)..."
-        report.looked_at_tree_node_id = self.unique_id
-        report.new_code = f") -> "
-        yield report
+        yield from self._yield_report(f"Generating code for function definition: {self.name} (type)...", f") -> ")
         if self.return_type:
             yield from self.return_type.generate_code()
         else:
@@ -2386,11 +1913,7 @@ class FunctionDefinition(Statement):
             report.looked_at_tree_node_id = self.unique_id
             report.new_code = "None"
             yield report
-        report = CodeGenerationReport()
-        report.action_bar_message = f"Generating code for function definition: {self.name} (body)..."
-        report.looked_at_tree_node_id = self.unique_id
-        report.new_code = f":\n"
-        yield report
+        yield from self._yield_report(f"Generating code for function definition: {self.name} (body)...", f":\n")
         yield from self.body.generate_code(indent + "    ")
 
     def __repr__(self):
@@ -2418,14 +1941,6 @@ class FunctionCall(Expression):
     """
 
     def __init__(self, name: str, arguments: Arguments, line: int, is_procedure_call: bool = False):
-        """
-        Initialize the FunctionCall instance.
-
-        Args:
-            name (str): The name of the function being called.
-            arguments (Arguments): An argument node for the list of argument expressions.
-            line (int): The line number in the source file.
-        """
         super().__init__(line)
         self.name = name
         self.arguments = arguments
@@ -2444,17 +1959,9 @@ class FunctionCall(Expression):
         Yields:
             CodeGenerationReport: Events forming the call expression (and newline for procedures).
         """
-        report = CodeGenerationReport()
-        report.action_bar_message = f"Generating code for function call: {self.name}..."
-        report.looked_at_tree_node_id = self.unique_id
-        report.new_code = f"{indent}{self.name}("
-        yield report
+        yield from self._yield_report(f"Generating code for function call: {self.name}...", f"{indent}{self.name}(")
         yield from self.arguments.generate_code()
-        report = CodeGenerationReport()
-        report.action_bar_message = f"Finishing code for function call: {self.name}..."
-        report.looked_at_tree_node_id = self.unique_id
-        report.new_code = ")"
-        yield report
+        yield from self._yield_report(f"Finishing code for function call: {self.name}...", ")")
         if self.is_procedure:
             report = CodeGenerationReport()
             report.action_bar_message = f"Adding line break for procedure: {self.name}..."
@@ -2480,13 +1987,6 @@ class ReturnStatement(Statement):
     """
 
     def __init__(self, expression: Expression, line: int):
-        """
-        Initialize the ReturnStatement instance.
-
-        Args:
-            expression (Expression): The expression to return.
-            line (int): The line number in the source file.
-        """
         super().__init__(line)
         self.expression = expression
         self.edges = [expression]  # type: ignore
@@ -2503,17 +2003,9 @@ class ReturnStatement(Statement):
         Yields:
             CodeGenerationReport: Events forming `return <expr>`.
         """
-        report = CodeGenerationReport()
-        report.action_bar_message = "Generating code for return statement..."
-        report.looked_at_tree_node_id = self.unique_id
-        report.new_code = f"{indent}return "
-        yield report
+        yield from self._yield_report("Generating code for return statement...", f"{indent}return ")
         yield from self.expression.generate_code()
-        report = CodeGenerationReport()
-        report.action_bar_message = "Finishing code for return statement..."
-        report.looked_at_tree_node_id = self.unique_id
-        report.new_code = "\n"
-        yield report
+        yield from self._yield_report("Finishing code for return statement...", "\n")
 
     def __repr__(self):
         return f"ReturnStmtNode({self.expression})"
@@ -2537,14 +2029,6 @@ class OpenFileStatement(Statement):
     """
 
     def __init__(self, filename: Expression, mode: str, line: int):
-        """
-        Initialize the OpenFileStatement instance.
-
-        Args:
-            filename_expr (Expression): The expression representing the filename.
-            mode (Literal): The mode in which to open the file ('r', 'w', 'a').
-            line (int): The line number in the source file.
-        """
         super().__init__(line)
         self.filename = filename
         self.mode = mode
@@ -2564,23 +2048,11 @@ class OpenFileStatement(Statement):
         """
         modes = {"READ": "r", "WRITE": "w", "APPEND": "a"}
         self.mode = modes.get(self.mode.upper(), "r")
-        report = CodeGenerationReport()
-        report.action_bar_message = "Generating code for open file statement..."
-        report.looked_at_tree_node_id = self.unique_id
-        report.new_code = f"{indent}CURRENT_OPEN_FILES["
-        yield report
+        yield from self._yield_report("Generating code for open file statement...", f"{indent}CURRENT_OPEN_FILES[")
         yield from self.filename.generate_code()
-        report = CodeGenerationReport()
-        report.action_bar_message = "Continuing code for open file statement..."
-        report.looked_at_tree_node_id = self.unique_id
-        report.new_code = f"] = open("
-        yield report
+        yield from self._yield_report("Continuing code for open file statement...", f"] = open(")
         yield from self.filename.generate_code()
-        report = CodeGenerationReport()
-        report.action_bar_message = "Finalizing code for open file statement..."
-        report.looked_at_tree_node_id = self.unique_id
-        report.new_code = f", '{self.mode}')\n"
-        yield report
+        yield from self._yield_report("Finalizing code for open file statement...", f", '{self.mode}')\n")
 
     def __repr__(self):
         return f"OpenFileStmtNode({self.filename}, mode={self.mode}, line {self.line})"
@@ -2601,14 +2073,6 @@ class ReadFileStatement(Statement):
     """
 
     def __init__(self, filename: Expression, variable: Variable, line: int):
-        """
-        Initialize the ReadFileStatement instance.
-
-        Args:
-            filename (Expression): The expression representing the filename.
-            variable (Variable): The variable to store the read data.
-            line (int): The line number in the source file.
-        """
         super().__init__(line)
         self.filename = filename
         self.variable = variable
@@ -2626,23 +2090,11 @@ class ReadFileStatement(Statement):
         Yields:
             CodeGenerationReport: Events forming the assignment from `readline()`.
         """
-        report = CodeGenerationReport()
-        report.action_bar_message = "Generating code for read file statement..."
-        report.looked_at_tree_node_id = self.unique_id
-        report.new_code = indent
-        yield report
+        yield from self._yield_report("Generating code for read file statement...", indent)
         yield from self.variable.generate_code()
-        report = CodeGenerationReport()
-        report.action_bar_message = "Continuing code for read file statement..."
-        report.looked_at_tree_node_id = self.unique_id
-        report.new_code = f" = CURRENT_OPEN_FILES["
-        yield report
+        yield from self._yield_report("Continuing code for read file statement...", f" = CURRENT_OPEN_FILES[")
         yield from self.filename.generate_code()
-        report = CodeGenerationReport()
-        report.action_bar_message = "Finalizing code for read file statement..."
-        report.looked_at_tree_node_id = self.unique_id
-        report.new_code = f"].readline()\n"
-        yield report
+        yield from self._yield_report("Finalizing code for read file statement...", f"].readline()\n")
 
     def __repr__(self):
         return f"ReadFileStmtNode({self.filename}, {self.variable}, line {self.line})"
@@ -2662,13 +2114,6 @@ class EOFStatement(Expression):
     """
 
     def __init__(self, filename: Expression, line: int):
-        """
-        Initialize the EOFStatement instance.
-
-        Args:
-            filename (Expression): The expression representing the filename.
-            line (int): The line number in the source file.
-        """
         super().__init__(line)
         self.filename = filename
         self.edges = [filename]  # type: ignore
@@ -2679,23 +2124,12 @@ class EOFStatement(Expression):
     def generate_code(self, indent="") -> Generator[CodeGenerationReport, None, None]:
         """Yield code-generation events for EOF(...).
 
-        Args:
-            indent (str): Unused for expressions (kept for API consistency).
-
         Yields:
             CodeGenerationReport: Events forming a call to `IsEndOfFile(...)`.
         """
-        report = CodeGenerationReport()
-        report.action_bar_message = "Generating code for EOF function..."
-        report.looked_at_tree_node_id = self.unique_id
-        report.new_code = f"{indent}IsEndOfFile("
-        yield report
+        yield from self._yield_report("Generating code for EOF function...", f"{indent}IsEndOfFile(")
         yield from self.filename.generate_code()
-        report = CodeGenerationReport()
-        report.action_bar_message = "Finalizing code for EOF function..."
-        report.looked_at_tree_node_id = self.unique_id
-        report.new_code = ")"
-        yield report
+        yield from self._yield_report("Finalizing code for EOF function...", ")")
 
 
 class WriteFileStatement(Statement):
@@ -2715,14 +2149,6 @@ class WriteFileStatement(Statement):
     def __init__(
         self, filename: Expression, expression: Expression, line: int
     ):
-        """
-        Initialize the WriteFileStatement instance.
-
-        Args:
-            filename (Expression): The expression representing the filename.
-            expression (Expression): The expression to write to the file.
-            line (int): The line number in the source file.
-        """
         super().__init__(line)
         self.filename = filename
         self.expression = expression
@@ -2740,23 +2166,11 @@ class WriteFileStatement(Statement):
         Yields:
             CodeGenerationReport: Events forming a `write(str(...))` call.
         """
-        report = CodeGenerationReport()
-        report.action_bar_message = "Generating code for write file statement..."
-        report.looked_at_tree_node_id = self.unique_id
-        report.new_code = f"{indent}CURRENT_OPEN_FILES["
-        yield report
+        yield from self._yield_report("Generating code for write file statement...", f"{indent}CURRENT_OPEN_FILES[")
         yield from self.filename.generate_code()
-        report = CodeGenerationReport()
-        report.action_bar_message = "Continuing code for write file statement..."
-        report.looked_at_tree_node_id = self.unique_id
-        report.new_code = f"].write(str("
-        yield report
+        yield from self._yield_report("Continuing code for write file statement...", f"].write(str(")
         yield from self.expression.generate_code()
-        report = CodeGenerationReport()
-        report.action_bar_message = "Finalizing code for write file statement..."
-        report.looked_at_tree_node_id = self.unique_id
-        report.new_code = f"))\n"
-        yield report
+        yield from self._yield_report("Finalizing code for write file statement...", f"))\n")
 
     def __repr__(self):
         return (
@@ -2778,13 +2192,6 @@ class CloseFileStatement(Statement):
     """
 
     def __init__(self, filename: Expression, line: int):
-        """
-        Initialize the CloseFileStatement instance.
-
-        Args:
-            filename (Expression): The expression representing the filename.
-            line (int): The line number in the source file.
-        """
         super().__init__(line)
         self.filename = filename
         self.edges = [filename]  # type: ignore
@@ -2801,28 +2208,12 @@ class CloseFileStatement(Statement):
         Yields:
             CodeGenerationReport: Events closing and removing the runtime file handle.
         """
-        report = CodeGenerationReport()
-        report.action_bar_message = "Generating code for close file statement..."
-        report.looked_at_tree_node_id = self.unique_id
-        report.new_code = f"{indent}CURRENT_OPEN_FILES["
-        yield report
+        yield from self._yield_report("Generating code for close file statement...", f"{indent}CURRENT_OPEN_FILES[")
         yield from self.filename.generate_code()
-        report = CodeGenerationReport()
-        report.action_bar_message = "Continuing code for close file statement..."
-        report.looked_at_tree_node_id = self.unique_id
-        report.new_code = f"].close()\n"
-        yield report
-        report = CodeGenerationReport()
-        report.action_bar_message = "Finalizing code for close file statement..."
-        report.looked_at_tree_node_id = self.unique_id
-        report.new_code = f"{indent}CURRENT_OPEN_FILES.pop("
-        yield report
+        yield from self._yield_report("Continuing code for close file statement...", f"].close()\n")
+        yield from self._yield_report("Finalizing code for close file statement...", f"{indent}CURRENT_OPEN_FILES.pop(")
         yield from self.filename.generate_code()
-        report = CodeGenerationReport()
-        report.action_bar_message = "Finished code for close file statement."
-        report.looked_at_tree_node_id = self.unique_id
-        report.new_code = f")\n"
-        yield report
+        yield from self._yield_report("Finished code for close file statement.", f")\n")
 
     def __repr__(self):
         return f"CloseFileStmtNode({self.filename}, line {self.line})"
