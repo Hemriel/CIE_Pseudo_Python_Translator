@@ -12,6 +12,13 @@ if str(_SRC_DIR) not in sys.path:
 
 from compile_pipeline import compile_file_to_outputs  # noqa: E402
 
+# Import diagnostic utilities
+try:
+    from diagnose_unchecked_types import clear_diagnostic_file
+except ImportError:
+    def clear_diagnostic_file() -> None:
+        pass
+
 
 def _collect_correct_examples() -> list[Path]:
     correct_dir = _REPO_ROOT / "examples" / "correct_examples"
@@ -35,6 +42,9 @@ def _clean_program_outputs(*, output_root: Path, program_name: str) -> None:
 
 def main(argv: list[str]) -> int:
     output_root = _REPO_ROOT / "outputs"
+
+    # Clear diagnostic file at start of harness run
+    clear_diagnostic_file()
 
     files = _collect_correct_examples()
     if not files:

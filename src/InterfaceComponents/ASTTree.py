@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any, cast
+
 from rich.text import Text
 from textual.widgets import Tree
 from textual.widgets.tree import TreeNode
@@ -10,8 +12,8 @@ from CompilerComponents.ProgressReport import (
     SecondPassReport,
     CodeGenerationReport,
 )
-from CompilerComponents.AST import ASTNode
-from CompilerComponents.TypeSystem import type_to_string
+from CompilerComponents.AST import ASTNode, Argument, Expression, FunctionCall, Literal, Variable, VariableDeclaration, CompositeDataType
+from CompilerComponents.TypeSystem import UnknownType, type_to_string
 
 
 class ASTTree(Tree):
@@ -26,6 +28,10 @@ class ASTTree(Tree):
         super().__init__(label, **kwargs)
         self._nodes_by_id: dict[int, TreeNode] = {0: self.root}
         self._bottom_node: TreeNode = self.root
+        # When we build a full tree from an AST root, we assign each ASTNode.unique_id
+        # to the corresponding TreeNode.id. This mapping lets us refresh labels in-place.
+        self._ast_by_tree_id: dict[int, ASTNode] = {}
+        self._include_static_types: bool = False
 
     def reset_tree(self, root_label: str = "global") -> None:
         self.clear()
@@ -33,6 +39,7 @@ class ASTTree(Tree):
         self.root.expand()
         self._nodes_by_id = {0: self.root}
         self._bottom_node = self.root
+        self._ast_by_tree_id = {}
 
     def _scroll_to_bottom(self) -> None:
         """Keep the tree viewport pinned to the bottom-most node.
@@ -107,35 +114,103 @@ class ASTTree(Tree):
         self._scroll_to_bottom()
 
     def apply_first_pass_report(self, pass_report: FirstPassReport) -> None:
-        if pass_report.looked_at_tree_node_id:
-            node = self.get_node_by_id(pass_report.looked_at_tree_node_id)
+        if pass_report.looked_at_tree_node_id is not None:
+            node = self.get_node_by_id(cast(Any, pass_report.looked_at_tree_node_id))
             if node:
                 self.move_cursor(node)
                 self.scroll_to_node(node)
+            self.refresh_labels_for_tree_id(cast(int, pass_report.looked_at_tree_node_id))
 
     def apply_second_pass_report(self, second_pass_report: SecondPassReport) -> None:
-        if second_pass_report.looked_at_tree_node_id:
-            node = self.get_node_by_id(second_pass_report.looked_at_tree_node_id)
+        if second_pass_report.looked_at_tree_node_id is not None:
+            node = self.get_node_by_id(cast(Any, second_pass_report.looked_at_tree_node_id))
             if node:
                 self.move_cursor(node)
                 self.scroll_to_node(node)
+            # Semantic 2nd pass updates identifier/lookup types; reflect changes immediately.
+            self.refresh_labels_for_tree_id(cast(int, second_pass_report.looked_at_tree_node_id))
 
     def apply_code_generation_report(
         self, code_generation_report: CodeGenerationReport
     ) -> None:
-        if code_generation_report.looked_at_tree_node_id:
-            node = self.get_node_by_id(code_generation_report.looked_at_tree_node_id)
+        if code_generation_report.looked_at_tree_node_id is not None:
+            node = self.get_node_by_id(cast(Any, code_generation_report.looked_at_tree_node_id))
             if node:
                 self.move_cursor(node)
                 self.scroll_to_node(node)
+            self.refresh_labels_for_tree_id(cast(int, code_generation_report.looked_at_tree_node_id))
+
+    def refresh_labels_for_tree_id(self, tree_node_id: int, *, include_descendants: bool = True) -> None:
+        """Refresh the label for a tree node (and optionally its AST subtree)."""
+
+        # Tree root node id can be 0; treat it as valid.
+        if tree_node_id is None:
+            return
+
+        ast_node = self._ast_by_tree_id.get(int(tree_node_id))
+        if ast_node is None:
+            return
+
+        def _refresh_one(n: ASTNode) -> None:
+            if n.unique_id is None:
+                return
+            tree_node = self.get_node_by_id(cast(Any, n.unique_id))
+            if tree_node is None:
+                return
+            tree_node.set_label(
+                self._styled_label_for_node(
+                    n,
+                    include_static_types=self._include_static_types,
+                )
+            )
+
+        _refresh_one(ast_node)
+        if not include_descendants:
+            return
+
+        for child in getattr(ast_node, "edges", []) or []:
+            if isinstance(child, ASTNode):
+                self.refresh_labels_for_tree_id(int(child.unique_id) if child.unique_id else 0, include_descendants=True)
 
     def _label_for_node(self, ast_node: ASTNode, *, include_static_types: bool) -> str:
         base = ast_node.unindented_representation()
         if not include_static_types:
             return base
 
+        # Argument nodes are explicitly typed declarations; never show Unverified.
+        if isinstance(ast_node, Argument):
+            return base
+
+        # Procedure calls are statements; do not show type suffixes.
+        if isinstance(ast_node, FunctionCall) and getattr(ast_node, "is_procedure", False):
+            return base
+
+        # Variable nodes inside declarations are identifier declarations, not uses.
+        # They should never show "Unverified" or be treated as expressions.
+        # Their declared type is already in the base label from unindented_representation().
+        if isinstance(ast_node, Variable):
+            # Check if this Variable is a child of a declaration statement.
+            # We approximate this by checking if it has no static_type (declarations
+            # are skipped by type inference) and its .type field matches a declared type.
+            if getattr(ast_node, "static_type", None) is None:
+                # This is likely a declaration identifier; use the .type field directly.
+                shown = ast_node.type if getattr(ast_node, "type", "unknown") != "unknown" else "Unknown"
+                return f"Identifier: {ast_node.name} : {shown}"
+            
+            # Otherwise it's a use; show the resolved/inferred type.
+            shown = ast_node.type if getattr(ast_node, "type", "unknown") != "unknown" else "Unknown"
+            return f"Identifier: {ast_node.name} : {shown}"
+
+        # Literal nodes are self-typed and the base label already includes the type.
+        # Never add a secondary suffix (prevents "... : STRING : STRING").
+        if isinstance(ast_node, Literal):
+            return base
+
         static_type = getattr(ast_node, "static_type", None)
         if static_type is None:
+            # Before strong type checking, expressions are unverified.
+            if isinstance(ast_node, Expression):
+                return f"{base} : Unverified"
             return base
 
         try:
@@ -143,10 +218,44 @@ class ASTTree(Tree):
         except Exception:
             type_str = str(static_type)
 
+        if isinstance(static_type, UnknownType):
+            reason = getattr(static_type, "reason", "") or ""
+            if reason.strip() == "" or reason.lower().strip() == "unverified":
+                type_str = "Unverified"
+            else:
+                type_str = f"Unknown({reason})"
+
         if not type_str:
             return base
 
-        return f"{base} :: {type_str}"
+        return f"{base} : {type_str}"
+
+    def _styled_label_for_node(self, ast_node: ASTNode, *, include_static_types: bool) -> Text:
+        """Create a Rich Text label with minimal teaching-friendly styling.
+
+        - Base label stays white
+        - Only the word "Unverified" is shown in red
+        """
+
+        label = self._label_for_node(ast_node, include_static_types=include_static_types)
+        text = Text(label, style="white")
+
+        if include_static_types:
+            marker = " : Unverified"
+            idx = label.find(marker)
+            if idx != -1:
+                # Color only the "Unverified" part.
+                start = idx + len(" : ")
+                text.stylize("red", start, len(label))
+
+            marker = " : Unknown"
+            idx = label.find(marker)
+            if idx != -1:
+                # Color the Unknown suffix (including any reason).
+                start = idx + len(" : ")
+                text.stylize("red", start, len(label))
+
+        return text
 
     def build_from_ast_root(self, ast_root: ASTNode, *, include_static_types: bool = False) -> None:
         """Builds the entire tree from a given AST root node.
@@ -156,7 +265,11 @@ class ASTTree(Tree):
         """
 
         self.reset_tree(root_label="global")
-        ast_root.unique_id = self.root.id
+        self._include_static_types = include_static_types
+
+        ast_root.unique_id = cast(Any, self.root.id)
+        self._ast_by_tree_id[int(cast(int, self.root.id))] = ast_root
+
         self._build_subtree(ast_root, self.root, include_static_types=include_static_types)
         self.root.expand()
         self._scroll_to_top()
@@ -176,8 +289,13 @@ class ASTTree(Tree):
         """
 
         for child in ast_node.edges:
-            child_label = self._label_for_node(child, include_static_types=include_static_types)
-            child_tree_node = tree_node.add(Text(child_label, style="white"))
-            child.unique_id = child_tree_node.id
+            child_tree_node = tree_node.add(
+                self._styled_label_for_node(
+                    child,
+                    include_static_types=include_static_types,
+                )
+            )
+            child.unique_id = cast(Any, child_tree_node.id)
+            self._ast_by_tree_id[int(cast(int, child_tree_node.id))] = child
             child_tree_node.expand()
             self._build_subtree(child, child_tree_node, include_static_types=include_static_types)

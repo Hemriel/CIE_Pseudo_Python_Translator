@@ -212,6 +212,7 @@ class CIEPseudocodeToPythonCompiler(App):
             ".mypy_cache",
             ".pytest_cache",
             ".ruff_cache",
+            "scripts",
         }
         return p.name in hidden
 
@@ -575,6 +576,8 @@ class CIEPseudocodeToPythonCompiler(App):
             self.post_to_action_bar("No AST available. Run parsing first.", "error")
             self.running = False
             return
+        # Show declared/lookup types as they are discovered (and mark expressions as Unverified).
+        self.left_panel.ast_tree.build_from_ast_root(self.ast_root, include_static_types=True)
         self.left_panel.ast_tree.move_cursor_to_line(0, True)
         self.right_panel.complete_symbol_table.move_cursor(row=0, scroll=True)
         self.pipeline.ast_root = self.ast_root
@@ -600,6 +603,12 @@ class CIEPseudocodeToPythonCompiler(App):
             self.running = False
             return
 
+        # Show type tags immediately (expressions start as Unverified).
+        self.left_panel.ast_tree.build_from_ast_root(
+            self.ast_root,
+            include_static_types=True,
+        )
+
         # Keep symbol table view available while checking.
         try:
             self.left_panel.ast_tree.move_cursor_to_line(0, True)
@@ -618,12 +627,6 @@ class CIEPseudocodeToPythonCompiler(App):
         try:
             done, report = self.pipeline.tick_type_check()
             if done:
-                # Rebuild the AST tree to visualize inferred static types.
-                if self.ast_root is not None:
-                    self.left_panel.ast_tree.build_from_ast_root(
-                        self.ast_root,
-                        include_static_types=True,
-                    )
                 self.post_to_action_bar("Type checking completed.", "success")
                 return True
 
@@ -631,13 +634,22 @@ class CIEPseudocodeToPythonCompiler(App):
                 return False
 
             # Cursor tracking on the AST tree.
-            if report.looked_at_tree_node_id:
+            if report.looked_at_tree_node_id is not None:
                 node = self.left_panel.ast_tree.get_node_by_id(
                     cast(Any, report.looked_at_tree_node_id)
                 )
                 if node:
                     self.left_panel.ast_tree.move_cursor(node)
                     self.left_panel.ast_tree.scroll_to_node(node)
+
+                # Refresh focused node (and subtree) labels in real time.
+                try:
+                    self.left_panel.ast_tree.refresh_labels_for_tree_id(
+                        cast(Any, report.looked_at_tree_node_id),
+                        include_descendants=True,
+                    )
+                except Exception:
+                    pass
 
             if report.action_bar_message:
                 self.post_to_action_bar(report.action_bar_message, "info")

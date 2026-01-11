@@ -251,7 +251,9 @@ class Literal(Expression):
         self.value = value
 
     def unindented_representation(self) -> str:
-        return f"{str(self.type)} literal: {self.value}"
+        # Literals are always self-typed (no inference needed), so keep the label
+        # explicit and consistent for pedagogy/UI.
+        return f"LITERAL : {self.value} : {self.type}"
 
     def __repr__(self):
         return f"LiteralNode({self.type}, {self.value})"

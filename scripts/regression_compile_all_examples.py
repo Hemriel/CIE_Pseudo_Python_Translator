@@ -6,6 +6,14 @@ from pathlib import Path
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 
+# Import diagnostic utilities
+sys.path.insert(0, str(_REPO_ROOT / "scripts"))
+try:
+    from diagnose_unchecked_types import clear_diagnostic_file
+except ImportError:
+    def clear_diagnostic_file() -> None:
+        pass
+
 
 def _run(script_rel: str) -> int:
     script = (_REPO_ROOT / script_rel).resolve()
@@ -20,6 +28,9 @@ def _run(script_rel: str) -> int:
 
 
 def main(argv: list[str]) -> int:
+    # Clear diagnostic file at start of harness run
+    clear_diagnostic_file()
+    
     rc_correct = _run("scripts/regression_compile_correct_examples.py")
     rc_incorrect = _run("scripts/regression_compile_incorrect_examples.py")
 

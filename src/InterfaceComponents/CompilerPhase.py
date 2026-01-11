@@ -72,9 +72,9 @@ PHASES = [
     Phase(
         name="Semantic Analysis: second pass",
         step_number="3.2",
-        description="Checks for semantic errors in the AST.",
+        description="Checks for semantic errors in the AST; also annotates declared/lookup-based types.",
         left_panel_type=DynamicPanelContentType.AST_TREE,
-        left_panel_title="Abstract Syntax Tree (AST)",
+        left_panel_title="Abstract Syntax Tree (AST) — with declared/lookup types",
         right_panel_type=DynamicPanelContentType.COMPLETE_SYMBOL_TABLE,
         right_panel_title="Complete symbol table"
     ),

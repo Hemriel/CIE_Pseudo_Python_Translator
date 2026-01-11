@@ -1,6 +1,7 @@
 from CompilerComponents.ProgressReport import FirstPassReport, SecondPassReport
 from collections.abc import Generator
 from CompilerComponents.Symbols import SemanticError, Symbol, SymbolTable
+from CompilerComponents.TypeSystem import parse_symbol_type, parse_type_name
 from CompilerComponents.AST import (
     ASTNode,
     AssignmentStatement,
@@ -8,25 +9,34 @@ from CompilerComponents.AST import (
     CaseStatement,
     CloseFileStatement,
     CompositeDataType,
+    Condition,
+    EOFStatement,
     ForStatement,
     FunctionCall,
     FunctionDefinition,
     IfStatement,
     InputStatement,
+    IntCastMethod,
+    LengthStringMethod,
     Literal,
+    LowerStringMethod,
+    MidStringMethod,
     OneArrayAccess,
     OneArrayDeclaration,
     OpenFileStatement,
     OutputStatement,
     PostWhileStatement,
     PropertyAccess,
+    RandomRealMethod,
     ReadFileStatement,
     ReturnStatement,
     ReturnType,
+    RightStringMethod,
     Statements,
     TwoArrayAccess,
     TwoArrayDeclaration,
     UnaryExpression,
+    UpperStringMethod,
     Variable,
     VariableDeclaration,
     WhileStatement,
@@ -352,6 +362,30 @@ def get_second_pass_reporter(ast_node, sym_table: SymbolTable, line: int, curren
     """
     report = SecondPassReport()
 
+    def _annotate_symbol_use(var_node: Variable, sym: Symbol) -> None:
+        # Populate basic symbol/type metadata early (3.2) for pedagogy/UI.
+        # Full expression inference and validation remains the responsibility
+        # of the strong type checker phase.
+        try:
+            var_node.type = sym.data_type
+        except Exception:
+            pass
+        try:
+            var_node.static_type = parse_symbol_type(sym.data_type)
+        except Exception:
+            pass
+        var_node.resolved_symbol = sym
+        var_node.resolved_scope = sym.scope
+
+    def _annotate_node_type(node: ASTNode, type_str: str) -> None:
+        try:
+            node.static_type = parse_symbol_type(type_str)
+        except Exception:
+            try:
+                node.static_type = parse_type_name(type_str)
+            except Exception:
+                pass
+
     # Base cases
     if ast_node is None:
         report.action_bar_message = "No node to process."
@@ -375,90 +409,34 @@ def get_second_pass_reporter(ast_node, sym_table: SymbolTable, line: int, curren
             )
             yield report
             return
+        _annotate_symbol_use(ast_node, sym)
         report.action_bar_message = f"Variable usage of '{var_name}'. Found in context scope '{sym.scope}'."
         report.looked_at_symbol = sym
         yield report
 
     # Property access used as an expression (e.g., RHS of assignment, OUTPUT)
     elif isinstance(ast_node, PropertyAccess):
-        def _extract_array_element_type(type_name: str) -> str | None:
-            # Handles: ARRAY[T] and 2D ARRAY[T]
-            if type_name.startswith("ARRAY[") and type_name.endswith("]"):
-                return type_name[len("ARRAY["):-1]
-            if type_name.startswith("2D ARRAY[") and type_name.endswith("]"):
-                return type_name[len("2D ARRAY["):-1]
+        # Process the base variable/expression first (yields reports for each step)
+        yield from get_second_pass_reporter(ast_node.variable, sym_table, ast_node.line, current_scope)
+        
+        # Now determine the base type to look up the property
+        def _get_base_type(expr: ASTNode) -> str | None:
+            """Extract the static_type from an already-processed expression."""
+            if hasattr(expr, 'static_type') and expr.static_type:
+                from CompilerComponents.TypeSystem import type_to_string
+                return type_to_string(expr.static_type)
             return None
-
-        def _infer_expr_type(expr: ASTNode, *, at_line: int, scope: str) -> str:
-            # Minimal type inference used to validate property access chains.
-            if isinstance(expr, Variable):
-                sym = sym_table.lookup(expr.name, at_line, context_scope=scope)
-                if not sym:
-                    raise SemanticError(
-                        f"Line {at_line}: Semantic error: variable '{expr.name}' not declared before use."
-                    )
-                return sym.data_type
-
-            if isinstance(expr, OneArrayAccess):
-                if not isinstance(expr.array, Variable):
-                    raise SemanticError(
-                        f"Line {at_line}: Semantic error: array access must target a declared array identifier."
-                    )
-                sym = sym_table.lookup(expr.array.name, at_line, context_scope=scope)
-                if not sym:
-                    raise SemanticError(
-                        f"Line {at_line}: Semantic error: array '{expr.array.name}' not declared before use."
-                    )
-                elem = _extract_array_element_type(sym.data_type)
-                if elem is None:
-                    raise SemanticError(
-                        f"Line {at_line}: Semantic error: '{expr.array.name}' is not an array."
-                    )
-                return elem
-
-            if isinstance(expr, TwoArrayAccess):
-                if not isinstance(expr.array, Variable):
-                    raise SemanticError(
-                        f"Line {at_line}: Semantic error: array access must target a declared array identifier."
-                    )
-                sym = sym_table.lookup(expr.array.name, at_line, context_scope=scope)
-                if not sym:
-                    raise SemanticError(
-                        f"Line {at_line}: Semantic error: array '{expr.array.name}' not declared before use."
-                    )
-                elem = _extract_array_element_type(sym.data_type)
-                if elem is None:
-                    raise SemanticError(
-                        f"Line {at_line}: Semantic error: '{expr.array.name}' is not an array."
-                    )
-                return elem
-
-            if isinstance(expr, PropertyAccess):
-                base_type = _infer_expr_type(expr.variable, at_line=at_line, scope=scope)
-                composite_sym = sym_table.lookup(base_type, at_line, context_scope=scope)
-                if not composite_sym:
-                    raise SemanticError(
-                        f"Line {at_line}: Semantic error: composite type '{base_type}' not declared before use."
-                    )
-                prop_sym = sym_table.lookup_local(expr.property.name, at_line, scope=base_type)
-                if not prop_sym:
-                    raise SemanticError(
-                        f"Line {at_line}: Semantic error: property '{expr.property.name}' not found in composite type '{base_type}'."
-                    )
-                return prop_sym.data_type
-
-            raise SemanticError(
-                f"Line {at_line}: Semantic error: unsupported expression in property access."
-            )
-
+        
+        base_type = _get_base_type(ast_node.variable)
         report.looked_at_tree_node_id = ast_node.unique_id
-        try:
-            base_type = _infer_expr_type(ast_node.variable, at_line=ast_node.line, scope=current_scope)
-        except SemanticError as e:
-            report.error = e
+        
+        if not base_type:
+            report.error = SemanticError(
+                f"Line {ast_node.line}: Semantic error: could not determine type of base expression in property access."
+            )
             yield report
             return
-
+        
         composite_sym = sym_table.lookup(base_type, ast_node.line, context_scope=current_scope)
         if not composite_sym:
             report.error = SemanticError(
@@ -480,6 +458,10 @@ def get_second_pass_reporter(ast_node, sym_table: SymbolTable, line: int, curren
             f"Property '{property_name}' found in composite type '{base_type}'."
         )
         report.looked_at_symbol = property_sym
+        if isinstance(ast_node.property, Variable):
+            _annotate_symbol_use(ast_node.property, property_sym)
+        _annotate_node_type(ast_node, property_sym.data_type)
+        _annotate_node_type(ast_node, property_sym.data_type)
         yield report
         return
 
@@ -494,6 +476,10 @@ def get_second_pass_reporter(ast_node, sym_table: SymbolTable, line: int, curren
             )
             yield report
             return
+        ast_node.resolved_symbol = sym
+        ast_node.resolved_scope = sym.scope
+        if sym.return_type:
+            _annotate_node_type(ast_node, sym.return_type)
         report.action_bar_message = f"Function call to '{func_name}'. Found in context scope '{sym.scope}'."
         report.looked_at_symbol = sym
         yield report
@@ -512,94 +498,46 @@ def get_second_pass_reporter(ast_node, sym_table: SymbolTable, line: int, curren
 
     # Assignments
     elif isinstance(ast_node, AssignmentStatement):
-        yield from get_second_pass_reporter(ast_node.expression, sym_table, ast_node.line, current_scope)
+        # Process LHS (assignable) first, then RHS (expression)
+        
+        # Process array indices on LHS if present (for assignments like nums[i] <- value)
+        if isinstance(ast_node.variable, OneArrayAccess):
+            yield from get_second_pass_reporter(ast_node.variable.index, sym_table, ast_node.line, current_scope)
+        elif isinstance(ast_node.variable, TwoArrayAccess):
+            yield from get_second_pass_reporter(ast_node.variable.index1, sym_table, ast_node.line, current_scope)
+            yield from get_second_pass_reporter(ast_node.variable.index2, sym_table, ast_node.line, current_scope)
+        
         name_check = ""
         line_check = 0
         context = current_scope
 
+        # In the 2nd pass we are resolving identifier uses; for assignments that
+        # means the LHS identifier should be the focused/highlighted node.
+        focus_node_id = ast_node.unique_id
+
         if isinstance(ast_node.variable, PropertyAccess):
-            def _extract_array_element_type(type_name: str) -> str | None:
-                # Handles: ARRAY[T] and 2D ARRAY[T]
-                if type_name.startswith("ARRAY[") and type_name.endswith("]"):
-                    return type_name[len("ARRAY["):-1]
-                if type_name.startswith("2D ARRAY[") and type_name.endswith("]"):
-                    return type_name[len("2D ARRAY["):-1]
+            # Process the base variable/expression in the property access (yields reports for each step)
+            yield from get_second_pass_reporter(ast_node.variable.variable, sym_table, ast_node.line, current_scope)
+            
+            # Determine base type from the processed base expression
+            def _get_base_type(expr: ASTNode) -> str | None:
+                """Extract the static_type from an already-processed expression."""
+                if hasattr(expr, 'static_type') and expr.static_type:
+                    from CompilerComponents.TypeSystem import type_to_string
+                    return type_to_string(expr.static_type)
                 return None
-
-            def _infer_expr_type(expr: ASTNode, *, at_line: int, scope: str) -> str:
-                # Minimal type inference used to validate property access chains.
-                if isinstance(expr, Variable):
-                    sym = sym_table.lookup(expr.name, at_line, context_scope=scope)
-                    if not sym:
-                        raise SemanticError(
-                            f"Line {at_line}: Semantic error: variable '{expr.name}' not declared before use."
-                        )
-                    return sym.data_type
-
-                if isinstance(expr, OneArrayAccess):
-                    # Array variable must be declared; element type becomes the expression type.
-                    if not isinstance(expr.array, Variable):
-                        raise SemanticError(
-                            f"Line {at_line}: Semantic error: array access must target a declared array identifier."
-                        )
-                    sym = sym_table.lookup(expr.array.name, at_line, context_scope=scope)
-                    if not sym:
-                        raise SemanticError(
-                            f"Line {at_line}: Semantic error: array '{expr.array.name}' not declared before use."
-                        )
-                    elem = _extract_array_element_type(sym.data_type)
-                    if elem is None:
-                        raise SemanticError(
-                            f"Line {at_line}: Semantic error: '{expr.array.name}' is not an array."
-                        )
-                    return elem
-
-                if isinstance(expr, TwoArrayAccess):
-                    if not isinstance(expr.array, Variable):
-                        raise SemanticError(
-                            f"Line {at_line}: Semantic error: array access must target a declared array identifier."
-                        )
-                    sym = sym_table.lookup(expr.array.name, at_line, context_scope=scope)
-                    if not sym:
-                        raise SemanticError(
-                            f"Line {at_line}: Semantic error: array '{expr.array.name}' not declared before use."
-                        )
-                    elem = _extract_array_element_type(sym.data_type)
-                    if elem is None:
-                        raise SemanticError(
-                            f"Line {at_line}: Semantic error: '{expr.array.name}' is not an array."
-                        )
-                    return elem
-
-                if isinstance(expr, PropertyAccess):
-                    base_type = _infer_expr_type(expr.variable, at_line=at_line, scope=scope)
-                    composite_sym = sym_table.lookup(base_type, at_line, context_scope=scope)
-                    if not composite_sym:
-                        raise SemanticError(
-                            f"Line {at_line}: Semantic error: composite type '{base_type}' not declared before use."
-                        )
-                    prop_sym = sym_table.lookup_local(expr.property.name, at_line, scope=base_type)
-                    if not prop_sym:
-                        raise SemanticError(
-                            f"Line {at_line}: Semantic error: property '{expr.property.name}' not found in composite type '{base_type}'."
-                        )
-                    return prop_sym.data_type
-
-                raise SemanticError(
-                    f"Line {at_line}: Semantic error: unsupported expression in property access."
+            
+            base_type = _get_base_type(ast_node.variable.variable)
+            report.looked_at_tree_node_id = ast_node.variable.property.unique_id if getattr(ast_node.variable, "property", None) else ast_node.unique_id
+            
+            if not base_type:
+                report.error = SemanticError(
+                    f"Line {ast_node.line}: Semantic error: could not determine type of base expression in property access."
                 )
-
-            # Infer base type (supports chains like A[i].b.c).
-            try:
-                base_type = _infer_expr_type(ast_node.variable.variable, at_line=ast_node.line, scope=current_scope)
-            except SemanticError as e:
-                report.looked_at_tree_node_id = ast_node.unique_id
-                report.error = e
                 yield report
                 return
-
+            
             composite_sym = sym_table.lookup(base_type, ast_node.line, context_scope=current_scope)
-            report.looked_at_tree_node_id = ast_node.unique_id
             if not composite_sym:
                 report.error = SemanticError(
                     f"Line {ast_node.line}: Semantic error: composite type '{base_type}' not declared before use."
@@ -620,12 +558,19 @@ def get_second_pass_reporter(ast_node, sym_table: SymbolTable, line: int, curren
                 f"Property '{property_name}' found in composite type '{base_type}'."
             )
             report.looked_at_symbol = property_sym
+            if isinstance(ast_node.variable.property, Variable):
+                _annotate_symbol_use(ast_node.variable.property, property_sym)
+            _annotate_node_type(ast_node.variable, property_sym.data_type)
             yield report
+            
+            # Process RHS expression after LHS property access checks are complete
+            yield from get_second_pass_reporter(ast_node.expression, sym_table, ast_node.line, current_scope)
             return  # Property access checked, no need to check further
         
         if isinstance(ast_node.variable, Variable):
             name_check = ast_node.variable.name
             line_check = ast_node.line
+            focus_node_id = ast_node.variable.unique_id
         elif isinstance(ast_node.variable, OneArrayAccess):
             if not isinstance(ast_node.variable.array, Variable):
                 report.error = SemanticError(
@@ -635,6 +580,7 @@ def get_second_pass_reporter(ast_node, sym_table: SymbolTable, line: int, curren
                 return
             name_check = ast_node.variable.array.name
             line_check = ast_node.line
+            focus_node_id = ast_node.variable.array.unique_id
         elif isinstance(ast_node.variable, TwoArrayAccess):
             if not isinstance(ast_node.variable.array, Variable):
                 report.error = SemanticError(
@@ -644,15 +590,31 @@ def get_second_pass_reporter(ast_node, sym_table: SymbolTable, line: int, curren
                 return
             name_check = ast_node.variable.array.name
             line_check = ast_node.line
+            focus_node_id = ast_node.variable.array.unique_id
         
         sym = sym_table.lookup(name_check, line_check, context_scope=context)
-        report.looked_at_tree_node_id = ast_node.unique_id
+        report.looked_at_tree_node_id = focus_node_id
         if not sym:
             report.error = SemanticError(
                 f"Line {ast_node.line}: Semantic error: variable '{name_check}' not declared before use."
             )
             yield report
             return
+
+        # Update the LHS node(s) with declared type information.
+        if isinstance(ast_node.variable, Variable):
+            _annotate_symbol_use(ast_node.variable, sym)
+        elif isinstance(ast_node.variable, OneArrayAccess) and isinstance(ast_node.variable.array, Variable):
+            _annotate_symbol_use(ast_node.variable.array, sym)
+            # If the LHS is an array element, annotate the access expression with the element type.
+            if sym.data_type.startswith("ARRAY[") or sym.data_type.startswith("2D ARRAY["):
+                inner = sym.data_type.split("[", 1)[1].rsplit("]", 1)[0].strip()
+                _annotate_node_type(ast_node.variable, inner)
+        elif isinstance(ast_node.variable, TwoArrayAccess) and isinstance(ast_node.variable.array, Variable):
+            _annotate_symbol_use(ast_node.variable.array, sym)
+            if sym.data_type.startswith("ARRAY[") or sym.data_type.startswith("2D ARRAY["):
+                inner = sym.data_type.split("[", 1)[1].rsplit("]", 1)[0].strip()
+                _annotate_node_type(ast_node.variable, inner)
 
         # Constant assignment rule:
         # - constants are declared via `CONSTANT ...` and can only be assigned once
@@ -689,6 +651,31 @@ def get_second_pass_reporter(ast_node, sym_table: SymbolTable, line: int, curren
         report.action_bar_message = f"Assignment to variable '{name_check}'. Found in context scope '{sym.scope}'."
         report.looked_at_symbol = sym
         yield report
+        
+        # Process RHS expression after LHS checks are complete
+        yield from get_second_pass_reporter(ast_node.expression, sym_table, ast_node.line, current_scope)
+
+    # Array access expressions
+    elif isinstance(ast_node, OneArrayAccess):
+        yield from get_second_pass_reporter(ast_node.array, sym_table, ast_node.line, current_scope)
+        yield from get_second_pass_reporter(ast_node.index, sym_table, ast_node.line, current_scope)
+        if isinstance(ast_node.array, Variable):
+            sym = sym_table.lookup(ast_node.array.name, ast_node.line, context_scope=current_scope)
+            if sym and (sym.data_type.startswith("ARRAY[") or sym.data_type.startswith("2D ARRAY[")):
+                inner = sym.data_type.split("[", 1)[1].rsplit("]", 1)[0].strip()
+                _annotate_node_type(ast_node, inner)
+        return
+
+    elif isinstance(ast_node, TwoArrayAccess):
+        yield from get_second_pass_reporter(ast_node.array, sym_table, ast_node.line, current_scope)
+        yield from get_second_pass_reporter(ast_node.index1, sym_table, ast_node.line, current_scope)
+        yield from get_second_pass_reporter(ast_node.index2, sym_table, ast_node.line, current_scope)
+        if isinstance(ast_node.array, Variable):
+            sym = sym_table.lookup(ast_node.array.name, ast_node.line, context_scope=current_scope)
+            if sym and (sym.data_type.startswith("ARRAY[") or sym.data_type.startswith("2D ARRAY[")):
+                inner = sym.data_type.split("[", 1)[1].rsplit("]", 1)[0].strip()
+                _annotate_node_type(ast_node, inner)
+        return
         
     # Declarations must check that when declaring a custom typed variable, the type exists
     elif isinstance(ast_node, VariableDeclaration):
@@ -749,11 +736,35 @@ def get_second_pass_reporter(ast_node, sym_table: SymbolTable, line: int, curren
         yield report
 
     # Recursive cases
+    elif isinstance(ast_node, Condition):
+        # Unwrap the Condition node and process the inner expression
+        yield from get_second_pass_reporter(ast_node.expression, sym_table, ast_node.line, current_scope)
     elif isinstance(ast_node, UnaryExpression):
         yield from get_second_pass_reporter(ast_node.operand, sym_table, ast_node.line, current_scope)
     elif isinstance(ast_node, BinaryExpression):
         yield from get_second_pass_reporter(ast_node.left, sym_table, ast_node.line, current_scope)
         yield from get_second_pass_reporter(ast_node.right, sym_table, ast_node.line, current_scope)
+    
+    # Built-in method/function nodes - process their arguments
+    elif isinstance(ast_node, RightStringMethod):
+        yield from get_second_pass_reporter(ast_node.string_expr, sym_table, ast_node.line, current_scope)
+        yield from get_second_pass_reporter(ast_node.count_expr, sym_table, ast_node.line, current_scope)
+    elif isinstance(ast_node, LengthStringMethod):
+        yield from get_second_pass_reporter(ast_node.string_expr, sym_table, ast_node.line, current_scope)
+    elif isinstance(ast_node, MidStringMethod):
+        yield from get_second_pass_reporter(ast_node.string_expr, sym_table, ast_node.line, current_scope)
+        yield from get_second_pass_reporter(ast_node.start_expr, sym_table, ast_node.line, current_scope)
+        yield from get_second_pass_reporter(ast_node.length_expr, sym_table, ast_node.line, current_scope)
+    elif isinstance(ast_node, LowerStringMethod):
+        yield from get_second_pass_reporter(ast_node.string_expr, sym_table, ast_node.line, current_scope)
+    elif isinstance(ast_node, UpperStringMethod):
+        yield from get_second_pass_reporter(ast_node.string_expr, sym_table, ast_node.line, current_scope)
+    elif isinstance(ast_node, IntCastMethod):
+        yield from get_second_pass_reporter(ast_node.expr, sym_table, ast_node.line, current_scope)
+    elif isinstance(ast_node, RandomRealMethod):
+        yield from get_second_pass_reporter(ast_node.high_expr, sym_table, ast_node.line, current_scope)
+    elif isinstance(ast_node, EOFStatement):
+        yield from get_second_pass_reporter(ast_node.filename, sym_table, ast_node.line, current_scope)
     elif isinstance(ast_node, IfStatement):
         yield from get_second_pass_reporter(ast_node.condition, sym_table, ast_node.line, current_scope)
         yield from get_second_pass_reporter(ast_node.then_branch, sym_table, ast_node.line, current_scope)
@@ -761,12 +772,25 @@ def get_second_pass_reporter(ast_node, sym_table: SymbolTable, line: int, curren
             yield from get_second_pass_reporter(ast_node.else_branch, sym_table, ast_node.line, current_scope)
     elif isinstance(ast_node, ForStatement):
         yield from get_second_pass_reporter(
+            ast_node.loop_variable, sym_table, ast_node.line, current_scope
+        )
+        yield from get_second_pass_reporter(
             ast_node.bounds.lower_bound, sym_table, ast_node.line, current_scope
         )
         yield from get_second_pass_reporter(
             ast_node.bounds.upper_bound, sym_table, ast_node.line, current_scope
         )
         yield from get_second_pass_reporter(ast_node.body, sym_table, ast_node.line, current_scope)
+    elif isinstance(ast_node, OpenFileStatement):
+        yield from get_second_pass_reporter(ast_node.filename, sym_table, ast_node.line, current_scope)
+    elif isinstance(ast_node, CloseFileStatement):
+        yield from get_second_pass_reporter(ast_node.filename, sym_table, ast_node.line, current_scope)
+    elif isinstance(ast_node, ReadFileStatement):
+        yield from get_second_pass_reporter(ast_node.filename, sym_table, ast_node.line, current_scope)
+        yield from get_second_pass_reporter(ast_node.variable, sym_table, ast_node.line, current_scope)
+    elif isinstance(ast_node, WriteFileStatement):
+        yield from get_second_pass_reporter(ast_node.filename, sym_table, ast_node.line, current_scope)
+        yield from get_second_pass_reporter(ast_node.expression, sym_table, ast_node.line, current_scope)
     elif isinstance(ast_node, WhileStatement):
         yield from get_second_pass_reporter(ast_node.condition, sym_table, ast_node.line, current_scope)
         yield from get_second_pass_reporter(ast_node.body, sym_table, ast_node.line, current_scope)

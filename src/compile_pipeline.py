@@ -29,6 +29,19 @@ from CompilerComponents.SemanticAnalyser import (
 from CompilerComponents.TypeChecker import get_type_check_reporter
 from CompilerComponents.Symbols import SemanticError, SymbolTable
 
+# Import diagnostic utilities
+import sys
+_scripts_dir = Path(__file__).parent.parent / "scripts"
+if str(_scripts_dir) not in sys.path:
+    sys.path.insert(0, str(_scripts_dir))
+
+try:
+    from diagnose_unchecked_types import diagnose_unknown_identifiers
+except ImportError:
+    # Graceful degradation if diagnostic script is missing
+    def diagnose_unknown_identifiers(ast_root, filename: str) -> None:
+        pass
+
 
 class PipelineSession:
     """Shared compiler pipeline state.
@@ -180,6 +193,9 @@ class PipelineSession:
             report: SecondPassReport = next(self._second_pass_analyser)
             return False, report
         except StopIteration:
+            # Run diagnostic at end of second pass to capture unknown identifiers
+            if self.ast_root is not None:
+                diagnose_unknown_identifiers(self.ast_root, self.file_name or "unknown")
             return True, None
 
     # ----- Type checking (strong) -----

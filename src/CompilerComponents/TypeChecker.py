@@ -149,6 +149,11 @@ def get_type_check_reporter(
         if isinstance(expr, Variable):
             sym = _lookup_required(sym_table, expr.name, expr.line, scope)
             t = _symbol_type(sym)
+            # Keep Variable.type in sync for UI labels (ASTTree renders Variables from `.type`).
+            try:
+                expr.type = sym.data_type
+            except Exception:
+                pass
             expr.resolved_symbol = sym
             expr.resolved_scope = sym.scope
             expr.static_type = t
@@ -162,6 +167,11 @@ def get_type_check_reporter(
                 )
             arr_sym = _lookup_required(sym_table, expr.array.name, expr.line, scope)
             arr_t = _symbol_type(arr_sym)
+            try:
+                expr.array.type = arr_sym.data_type
+            except Exception:
+                pass
+            expr.array.static_type = arr_t
             expr.array.resolved_symbol = arr_sym
             expr.array.resolved_scope = arr_sym.scope
 
@@ -184,6 +194,11 @@ def get_type_check_reporter(
                 )
             arr_sym = _lookup_required(sym_table, expr.array.name, expr.line, scope)
             arr_t = _symbol_type(arr_sym)
+            try:
+                expr.array.type = arr_sym.data_type
+            except Exception:
+                pass
+            expr.array.static_type = arr_t
             expr.array.resolved_symbol = arr_sym
             expr.array.resolved_scope = arr_sym.scope
 
@@ -219,6 +234,14 @@ def get_type_check_reporter(
                     f"Line {expr.line}: Semantic error: property '{property_name}' not found in composite type '{type_name}'."
                 )
             t = parse_symbol_type(prop_sym.data_type)
+            # Also annotate the property identifier node for UI/teaching.
+            try:
+                expr.property.type = prop_sym.data_type
+            except Exception:
+                pass
+            expr.property.static_type = t
+            expr.property.resolved_symbol = prop_sym
+            expr.property.resolved_scope = type_name
             expr.resolved_symbol = prop_sym
             expr.resolved_scope = type_name
             expr.static_type = t
@@ -486,6 +509,79 @@ def get_type_check_reporter(
         expr.static_type = UnknownType(expr.__class__.__name__)
         return UnknownType(expr.__class__.__name__)
 
+    def infer_expr_with_steps(expr: ASTNode, scope: str) -> Generator[TypeCheckReport, None, Type]:
+        """Infer expression types bottom-up, yielding intermediate UI reports.
+
+        This is purely for visualization/teaching: it shows how the type of a
+        complex expression is built from inner-most expressions to the outer-most.
+        """
+
+        # Recurse first (post-order), then infer this node.
+        if isinstance(expr, Condition):
+            _ = yield from infer_expr_with_steps(expr.expression, scope)
+        elif isinstance(expr, UnaryExpression):
+            _ = yield from infer_expr_with_steps(expr.operand, scope)
+        elif isinstance(expr, BinaryExpression):
+            _ = yield from infer_expr_with_steps(expr.left, scope)
+            _ = yield from infer_expr_with_steps(expr.right, scope)
+        elif isinstance(expr, OneArrayAccess):
+            if isinstance(expr.array, ASTNode):
+                _ = yield from infer_expr_with_steps(expr.array, scope)
+            _ = yield from infer_expr_with_steps(expr.index, scope)
+        elif isinstance(expr, TwoArrayAccess):
+            if isinstance(expr.array, ASTNode):
+                _ = yield from infer_expr_with_steps(expr.array, scope)
+            _ = yield from infer_expr_with_steps(expr.index1, scope)
+            _ = yield from infer_expr_with_steps(expr.index2, scope)
+        elif isinstance(expr, PropertyAccess):
+            _ = yield from infer_expr_with_steps(expr.variable, scope)
+        elif isinstance(expr, FunctionCall):
+            for a in expr.arguments:
+                _ = yield from infer_expr_with_steps(a, scope)
+
+        # Now infer this node itself.
+        t = infer_expr(expr, scope)
+
+        if isinstance(expr, Literal):
+            emit(expr, f"Literal type is: {type_to_string(t)}", inferred=t)
+        elif isinstance(expr, Variable):
+            emit(expr, f"Identifier '{expr.name}' type is: {type_to_string(t)}", inferred=t)
+        elif isinstance(expr, UnaryExpression):
+            emit(expr, f"Unary expression ({expr.operator}) type inferred to: {type_to_string(t)}", inferred=t)
+        elif isinstance(expr, BinaryExpression):
+            emit(expr, f"Binary expression ({expr.operator}) type inferred to: {type_to_string(t)}", inferred=t)
+        elif isinstance(expr, FunctionCall):
+            emit(expr, f"Call '{expr.name}' type inferred to: {type_to_string(t)}", inferred=t)
+        elif isinstance(expr, PropertyAccess):
+            emit(expr, f"Property access type inferred to: {type_to_string(t)}", inferred=t)
+        elif isinstance(expr, (OneArrayAccess, TwoArrayAccess)):
+            emit(expr, f"Array access type inferred to: {type_to_string(t)}", inferred=t)
+        elif isinstance(expr, Condition):
+            emit(expr, f"Condition expression type inferred to: {type_to_string(t)}", inferred=t)
+        else:
+            emit(expr, f"Expression type inferred to: {type_to_string(t)}", inferred=t)
+
+        yield report
+        return t
+
+    def infer_assignable_type_with_steps(target: ASTNode, scope: str) -> Generator[TypeCheckReport, None, tuple[Type, Symbol | None]]:
+        if isinstance(target, Variable):
+            t = yield from infer_expr_with_steps(target, scope)
+            sym = target.resolved_symbol
+            return t, sym
+
+        if isinstance(target, (OneArrayAccess, TwoArrayAccess, PropertyAccess)):
+            t = yield from infer_expr_with_steps(target, scope)
+            if isinstance(target, PropertyAccess):
+                return t, target.resolved_symbol
+            base_var = target.array  # type: ignore[attr-defined]
+            sym = base_var.resolved_symbol if isinstance(base_var, Variable) else None
+            return t, sym
+
+        raise SemanticError(
+            f"Line {target.line}: Semantic error: invalid assignment target."
+        )
+
     def infer_assignable_type(target: ASTNode, scope: str) -> tuple[Type, Symbol | None]:
         if isinstance(target, Variable):
             sym = _lookup_required(sym_table, target.name, target.line, scope)
@@ -600,54 +696,65 @@ def get_type_check_reporter(
             if function_return_type is None:
                 yield from fail(ast_node, "RETURN used outside of a function")
                 return
-            actual = infer_expr(ast_node.expression, current_scope)
+            actual = yield from infer_expr_with_steps(ast_node.expression, current_scope)
             if not is_assignable(function_return_type, actual):
                 yield from fail(
                     ast_node,
                     f"return type mismatch (expected {type_to_string(function_return_type)}, got {type_to_string(actual)})",
                 )
                 return
-            emit(ast_node, "Return statement type-checked.", inferred=actual, expected=function_return_type)
+            emit(
+                ast_node,
+                f"Return checked: expected {type_to_string(function_return_type)}, got {type_to_string(actual)}",
+                inferred=actual,
+                expected=function_return_type,
+            )
             yield report
             return
 
         # Assignment
         if isinstance(ast_node, AssignmentStatement):
-            lhs_t, lhs_sym = infer_assignable_type(ast_node.variable, current_scope)
-            rhs_t = infer_expr(ast_node.expression, current_scope)
+            lhs_t, lhs_sym = yield from infer_assignable_type_with_steps(ast_node.variable, current_scope)
+            rhs_t = yield from infer_expr_with_steps(ast_node.expression, current_scope)
             if not is_assignable(lhs_t, rhs_t):
                 yield from fail(
                     ast_node,
                     f"cannot assign {type_to_string(rhs_t)} to {type_to_string(lhs_t)}",
                 )
                 return
-            emit(ast_node, "Assignment type-checked.", sym=lhs_sym, inferred=rhs_t, expected=lhs_t)
+            emit(
+                ast_node,
+                f"Assignment checked: target type {type_to_string(lhs_t)}, expression type {type_to_string(rhs_t)}",
+                sym=lhs_sym,
+                inferred=rhs_t,
+                expected=lhs_t,
+            )
             yield report
             return
 
         # IO
         if isinstance(ast_node, InputStatement):
-            dst_t, _sym = infer_assignable_type(ast_node.variable, current_scope)
+            dst_t, _sym = yield from infer_assignable_type_with_steps(ast_node.variable, current_scope)
             if not is_assignable(dst_t, AnyPrimitiveType()):
                 yield from fail(
                     ast_node,
                     f"INPUT target must be a primitive type (got {type_to_string(dst_t)})",
                 )
                 return
-            emit(ast_node, "INPUT statement checked.", inferred=dst_t)
+            emit(ast_node, f"INPUT checked: target type {type_to_string(dst_t)}", inferred=dst_t)
             yield report
             return
 
         if isinstance(ast_node, OutputStatement):
-            emit(ast_node, "OUTPUT statement checked.")
+            emit(ast_node, "OUTPUT checked: type-checking each expression...")
             yield report
             for e in ast_node.expressions:
-                _ = infer_expr(e, current_scope)
+                _ = yield from infer_expr_with_steps(e, current_scope)
             return
 
         # File ops
         if isinstance(ast_node, OpenFileStatement):
-            fname_t = infer_expr(ast_node.filename, current_scope)
+            fname_t = yield from infer_expr_with_steps(ast_node.filename, current_scope)
             if not (isinstance(fname_t, PrimitiveType) and fname_t.name == "STRING"):
                 yield from fail(ast_node, f"OPENFILE requires STRING filename (got {type_to_string(fname_t)})")
                 return
@@ -656,11 +763,11 @@ def get_type_check_reporter(
             return
 
         if isinstance(ast_node, ReadFileStatement):
-            fname_t = infer_expr(ast_node.filename, current_scope)
+            fname_t = yield from infer_expr_with_steps(ast_node.filename, current_scope)
             if not (isinstance(fname_t, PrimitiveType) and fname_t.name == "STRING"):
                 yield from fail(ast_node, f"READFILE requires STRING filename (got {type_to_string(fname_t)})")
                 return
-            var_t, _sym = infer_assignable_type(ast_node.variable, current_scope)
+            var_t, _sym = yield from infer_assignable_type_with_steps(ast_node.variable, current_scope)
             if not (isinstance(var_t, PrimitiveType) and var_t.name == "STRING"):
                 yield from fail(ast_node, f"READFILE target must be STRING (got {type_to_string(var_t)})")
                 return
@@ -669,17 +776,17 @@ def get_type_check_reporter(
             return
 
         if isinstance(ast_node, WriteFileStatement):
-            fname_t = infer_expr(ast_node.filename, current_scope)
+            fname_t = yield from infer_expr_with_steps(ast_node.filename, current_scope)
             if not (isinstance(fname_t, PrimitiveType) and fname_t.name == "STRING"):
                 yield from fail(ast_node, f"WRITEFILE requires STRING filename (got {type_to_string(fname_t)})")
                 return
-            _ = infer_expr(ast_node.expression, current_scope)
+            _ = yield from infer_expr_with_steps(ast_node.expression, current_scope)
             emit(ast_node, "WRITEFILE statement type-checked.")
             yield report
             return
 
         if isinstance(ast_node, CloseFileStatement):
-            fname_t = infer_expr(ast_node.filename, current_scope)
+            fname_t = yield from infer_expr_with_steps(ast_node.filename, current_scope)
             if not (isinstance(fname_t, PrimitiveType) and fname_t.name == "STRING"):
                 yield from fail(ast_node, f"CLOSEFILE requires STRING filename (got {type_to_string(fname_t)})")
                 return
@@ -689,11 +796,11 @@ def get_type_check_reporter(
 
         # Conditionals / loops
         if isinstance(ast_node, IfStatement):
-            cond_t = infer_expr(ast_node.condition, current_scope)
+            cond_t = yield from infer_expr_with_steps(ast_node.condition, current_scope)
             if not is_boolean(cond_t):
                 yield from fail(ast_node, f"IF condition must be BOOLEAN (got {type_to_string(cond_t)})")
                 return
-            emit(ast_node, "IF statement condition type-checked.")
+            emit(ast_node, f"IF condition inferred to: {type_to_string(cond_t)}", inferred=cond_t, expected=PrimitiveType("BOOLEAN"))
             yield report
             yield from get_type_check_reporter(
                 ast_node.then_branch,
@@ -717,11 +824,11 @@ def get_type_check_reporter(
             return
 
         if isinstance(ast_node, WhileStatement):
-            cond_t = infer_expr(ast_node.condition, current_scope)
+            cond_t = yield from infer_expr_with_steps(ast_node.condition, current_scope)
             if not is_boolean(cond_t):
                 yield from fail(ast_node, f"WHILE condition must be BOOLEAN (got {type_to_string(cond_t)})")
                 return
-            emit(ast_node, "WHILE statement condition type-checked.")
+            emit(ast_node, f"WHILE condition inferred to: {type_to_string(cond_t)}", inferred=cond_t, expected=PrimitiveType("BOOLEAN"))
             yield report
             yield from get_type_check_reporter(
                 ast_node.body,
@@ -747,22 +854,27 @@ def get_type_check_reporter(
                 annotate_all_expressions=annotate_all_expressions,
                 _root_call=False,
             )
-            cond_t = infer_expr(ast_node.condition, current_scope)
+            cond_t = yield from infer_expr_with_steps(ast_node.condition, current_scope)
             if not is_boolean(cond_t):
                 yield from fail(ast_node, f"UNTIL condition must be BOOLEAN (got {type_to_string(cond_t)})")
                 return
             return
 
         if isinstance(ast_node, ForStatement):
-            lo_t = infer_expr(ast_node.bounds.lower_bound, current_scope)
-            hi_t = infer_expr(ast_node.bounds.upper_bound, current_scope)
+            # Loop variable itself must be INTEGER (range counter).
+            var_t = yield from infer_expr_with_steps(ast_node.loop_variable, current_scope)
+            if not (isinstance(var_t, PrimitiveType) and var_t.name == "INTEGER"):
+                yield from fail(ast_node, f"FOR loop variable must be INTEGER (got {type_to_string(var_t)})")
+                return
+            lo_t = yield from infer_expr_with_steps(ast_node.bounds.lower_bound, current_scope)
+            hi_t = yield from infer_expr_with_steps(ast_node.bounds.upper_bound, current_scope)
             if not (isinstance(lo_t, PrimitiveType) and lo_t.name == "INTEGER"):
                 yield from fail(ast_node, f"FOR lower bound must be INTEGER (got {type_to_string(lo_t)})")
                 return
             if not (isinstance(hi_t, PrimitiveType) and hi_t.name == "INTEGER"):
                 yield from fail(ast_node, f"FOR upper bound must be INTEGER (got {type_to_string(hi_t)})")
                 return
-            emit(ast_node, "FOR bounds type-checked.")
+            emit(ast_node, "FOR checked: loop variable + bounds are INTEGER")
             yield report
             yield from get_type_check_reporter(
                 ast_node.body,
@@ -777,8 +889,8 @@ def get_type_check_reporter(
 
         if isinstance(ast_node, CaseStatement):
             # Keep minimal for now: check the selector expression can be typed.
-            _ = infer_expr(ast_node.variable, current_scope)
-            emit(ast_node, "CASE selector expression type-checked.")
+            sel_t = yield from infer_expr_with_steps(ast_node.variable, current_scope)
+            emit(ast_node, f"CASE selector inferred to: {type_to_string(sel_t)}", inferred=sel_t)
             yield report
             for body in ast_node.cases.values():
                 yield from get_type_check_reporter(
@@ -794,22 +906,20 @@ def get_type_check_reporter(
 
         # Declarations/type defs: nothing to type-check here (handled by earlier passes)
         if isinstance(ast_node, (VariableDeclaration, CompositeDataType)):
-            emit(ast_node, "Declaration node (skipped in type checker).")
+            emit(ast_node, "Declaration node (skipped by type checker).")
             yield report
             return
 
         # Expression used as a statement (e.g., CALL ...)
         if isinstance(ast_node, FunctionCall) and ast_node.is_procedure:
-            _ = infer_expr(ast_node, current_scope)
-            emit(ast_node, "CALL statement type-checked.")
+            _ = yield from infer_expr_with_steps(ast_node, current_scope)
+            emit(ast_node, "CALL checked: procedure call is well-typed")
             yield report
             return
 
         # Fallback: if it's an expression node at top-level, just infer it.
         if isinstance(ast_node, (BinaryExpression, UnaryExpression, Literal, Variable, OneArrayAccess, TwoArrayAccess, PropertyAccess, EOFStatement)):
-            t = infer_expr(ast_node, current_scope)
-            emit(ast_node, "Expression type inferred.", inferred=t)
-            yield report
+            _ = yield from infer_expr_with_steps(ast_node, current_scope)
             return
 
         # Default recursive behavior
