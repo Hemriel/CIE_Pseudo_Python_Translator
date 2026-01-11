@@ -14,7 +14,7 @@ from pathlib import Path
 
 EXAMPLES_DIR = Path("examples/correct_examples")
 OUTPUTS_DIR = Path("outputs")
-EXPECTED_FILE = Path("expected_outputs.json")
+EXPECTED_FILE = Path("scripts/expected_outputs.json")
 
 # Examples to skip (file I/O, RNG, interactive input handled separately)
 SKIP_EXAMPLES = {

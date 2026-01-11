@@ -1,5 +1,7 @@
 from pathlib import Path
 import sys
+from dataclasses import dataclass, field
+from typing import Any
 
 _SRC_DIR = Path(__file__).resolve().parent / "src"
 if _SRC_DIR.exists():
@@ -20,23 +22,183 @@ from textual.widgets import (
 )
 from textual.binding import Binding
 from textual.reactive import reactive
-from typing import Any, cast
-from CompilerComponents.Lexer import LexingError
-
-import CompilerComponents.Parser as parser
-from CompilerComponents.Symbols import SemanticError
 
 from InterfaceComponents.CompilerPhase import Phase, PHASES
 
 from InterfaceComponents.DynamicPanel import DynamicPanel, DynamicPanelContentType
 
 from compile_pipeline import PipelineSession
+from InterfaceComponents.PhaseManager import PhaseManager, PhaseContext
+from InterfaceComponents.PhaseHandlers import (
+    SourceTrimmingHandler,
+    TokenizationHandler,
+    LimitedSymbolTableHandler,
+    ParsingHandler,
+    SemanticAnalysisFirstPassHandler,
+    SemanticAnalysisSecondPassHandler,
+    TypeCheckingHandler,
+    CodeGenerationHandler,
+)
+from InterfaceComponents.FileBrowserController import FileBrowserController
+from InterfaceComponents.UIStateManager import UIStateManager
+from InterfaceComponents.TickerController import TickerController
+
+
+# Configuration Constants
+class Config:
+    """Compiler configuration constants."""
+    PROJECT_ROOT = Path(__file__).resolve().parent
+    EMPTY_PHASE_NAME = ""
+    EMPTY_ACTION = ""
+    SOURCE_CODE_INPUT_PHASE = "Source Code Input"
+
+
+# State Dataclasses
+@dataclass
+class CompilerState:
+    """Compiler phase and error state."""
+    current_phase: str = ""
+    phase_failed: bool = False
+    error_message: str = ""
+    compiler_action: str = ""
+
+
+@dataclass
+class SourceCodeState:
+    """Source code and compilation artifacts."""
+    source_code: str = ""
+    source_trimmed: str = ""
+    output_code: str = ""
+    file_name: str = ""
+    ast_root: object = None
+    cleaned_lines: list = field(default_factory=list)
+    tokens: list = field(default_factory=list)
+    symbol_table_limited: Any = None  # SymbolTable object from compiler
+    symbol_table_complete: Any = None  # SymbolTable object from compiler
+
+
+@dataclass
+class UIState:
+    """UI interaction state."""
+    phase_subtitle_base: str = ""
+    awaiting_program_name: bool = False
+    programmatic_source_set: bool = False
 
 
 class CIEPseudocodeToPythonCompiler(App):
     """Educational interface for the CIE Pseudocode to Python Compiler."""
 
     CSS_PATH = "src/InterfaceComponents/styles.tcss"  # Path to the CSS file
+
+    # Reactive properties (map to dataclass state)
+    @property
+    def current_phase(self) -> str:
+        """Current compiler phase name."""
+        return self.compiler_state.current_phase
+    
+    @current_phase.setter
+    def current_phase(self, value: str):
+        self.compiler_state.current_phase = value
+    
+    @property
+    def phase_failed(self) -> bool:
+        """Whether current phase failed."""
+        return self.compiler_state.phase_failed
+    
+    @phase_failed.setter
+    def phase_failed(self, value: bool):
+        self.compiler_state.phase_failed = value
+    
+    @property
+    def error_message(self) -> str:
+        """Error message from compilation."""
+        return self.compiler_state.error_message
+    
+    @error_message.setter
+    def error_message(self, value: str):
+        self.compiler_state.error_message = value
+    
+    @property
+    def compiler_action(self) -> str:
+        """Current compiler action."""
+        return self.compiler_state.compiler_action
+    
+    @compiler_action.setter
+    def compiler_action(self, value: str):
+        self.compiler_state.compiler_action = value
+    
+    @property
+    def source_code(self) -> str:
+        """Source code being compiled."""
+        return self.source_state.source_code
+    
+    @source_code.setter
+    def source_code(self, value: str):
+        self.source_state.source_code = value
+    
+    @property
+    def source_trimmed(self) -> str:
+        """Trimmed source code."""
+        return self.source_state.source_trimmed
+    
+    @source_trimmed.setter
+    def source_trimmed(self, value: str):
+        self.source_state.source_trimmed = value
+    
+    @property
+    def output_code(self) -> str:
+        """Compiled output code."""
+        return self.source_state.output_code
+    
+    @output_code.setter
+    def output_code(self, value: str):
+        self.source_state.output_code = value
+    
+    @property
+    def file_name(self) -> str:
+        """Current source file name."""
+        return self.source_state.file_name
+    
+    @file_name.setter
+    def file_name(self, value: str):
+        self.source_state.file_name = value
+    
+    @property
+    def ast_root(self) -> object:
+        """AST root node."""
+        return self.source_state.ast_root
+    
+    @ast_root.setter
+    def ast_root(self, value: object):
+        self.source_state.ast_root = value
+    
+    @property
+    def cleaned_lines(self) -> list:
+        """Cleaned source lines."""
+        return self.source_state.cleaned_lines
+    
+    @property
+    def tokens(self) -> list:
+        """Lexical tokens."""
+        return self.source_state.tokens
+    
+    @property
+    def symbol_table_limited(self) -> dict:
+        """Limited symbol table."""
+        return self.source_state.symbol_table_limited
+    
+    @symbol_table_limited.setter
+    def symbol_table_limited(self, value: Any):
+        self.source_state.symbol_table_limited = value
+    
+    @property
+    def symbol_table_complete(self) -> dict:
+        """Complete symbol table."""
+        return self.source_state.symbol_table_complete
+    
+    @symbol_table_complete.setter
+    def symbol_table_complete(self, value: Any):
+        self.source_state.symbol_table_complete = value
 
     BINDINGS = [
         Binding("ctrl+l", "load_file", "Load File"),
@@ -52,20 +214,15 @@ class CIEPseudocodeToPythonCompiler(App):
     running = reactive(False)
 
     def watch_running(self, is_running: bool):
-        self.ticker.pause() if not is_running else self.ticker.resume()
-
-    subtitle = reactive("")
-
-    def watch_subtitle(self, new_subtitle: str):
-        self.query_one("#title-bar", Static).update(new_subtitle)
+        if is_running:
+            self.ticker_controller.resume()
+        else:
+            self.ticker_controller.pause()
 
     tick_interval = reactive(1.0)
 
     def watch_tick_interval(self, new_interval: float):
-        self.ticker.stop()
-        self.ticker = self.set_interval(
-            new_interval, self.progress_tick, pause=not self.running
-        )
+        self.ticker_controller.set_interval(new_interval)
 
     phase_completed = reactive(False)
 
@@ -88,28 +245,36 @@ class CIEPseudocodeToPythonCompiler(App):
 
     def __init__(self):
         super().__init__()
+        # Core components
         self.pipeline = PipelineSession()
-        self.current_phase = ""  # Current phase (e.g., "Lexing", "Parsing")
-        self.compiler_action = ""  # Current action (e.g., "Lexing identifier")
-        self.phase_failed = False
-        self.error_message = ""
+        
+        # Organize state into dataclasses
+        self.compiler_state = CompilerState()
+        self.source_state = SourceCodeState()
+        self.ui_state = UIState()
+        
+        # Reference pipeline data
+        self.source_state.cleaned_lines = self.pipeline.cleaned_lines
+        self.source_state.tokens = self.pipeline.tokens
+        self.source_state.symbol_table_limited = self.pipeline.symbol_table_limited
+        self.source_state.symbol_table_complete = self.pipeline.symbol_table_complete
 
-        self.source_code = ""  # Code to compile
-        self.source_trimmed = ""  # Trimmed source code
-        self.cleaned_lines = self.pipeline.cleaned_lines
-        self.tokens = self.pipeline.tokens
-        self.ast_root = None  # Root of the AST
-        self.symbol_table_limited = self.pipeline.symbol_table_limited
-        self.symbol_table_complete = self.pipeline.symbol_table_complete
-        self.output_code = ""  # Compilation output
-        self.file_name = ""  # Name of the file being compiled
+        self._project_root: Path = Config.PROJECT_ROOT
+        # Initialize phase manager with handlers
+        self.phase_manager = PhaseManager(PHASES)
+        self._register_phase_handlers()
 
-        self._phase_subtitle_base: str = ""
-        self._awaiting_program_name: bool = False
-        self._programmatic_source_set: bool = False
+        # Initialize controllers (Sprint 3)
+        self.ui_state_manager = UIStateManager(self)
+        self.ticker_controller = TickerController(self)
+        # File browser controller initialized later when panels are available
+        self.file_browser_controller: FileBrowserController | None = None
 
-        self._project_root: Path = Path(__file__).resolve().parent
-        self._fast_forward_mode: bool = False
+        # Fast-forward mode flag
+        self._fast_forward_mode = False
+
+        # Build action authorization rules
+        self._action_rules = self._build_action_rules()
 
     def compose(self) -> ComposeResult:
         """Create the layout of the application."""
@@ -148,16 +313,86 @@ class CIEPseudocodeToPythonCompiler(App):
                 classes="hidden",
             )
 
+    def _ensure_file_browser_controller(self) -> None:
+        """Lazily initialize file_browser_controller after panels are created."""
+        if self.file_browser_controller is None and self.right_panel:
+            tree = self.right_panel.directory_tree
+            self.file_browser_controller = FileBrowserController(
+                tree, self._project_root
+            )
+
+    def _build_action_rules(self) -> dict:
+        """Build action authorization rules dictionary.
+
+        Returns:
+            Dictionary mapping action names to lambda predicates that return bool
+        """
+        return {
+            "load_file": lambda: self.current_phase == "Source Code Input",
+            "start_lexing": lambda: self.current_phase == "Source Code Input",
+            "toggle_auto_progress": lambda: (
+                self.current_phase != "Source Code Input"
+                and not self.phase_completed
+                and self.current_phase != PHASES[-1].name
+            ),
+            "increase_speed": lambda: (
+                self.current_phase != "Source Code Input"
+                and self.running
+                and self.current_phase != PHASES[-1].name
+            ),
+            "decrease_speed": lambda: (
+                self.current_phase != "Source Code Input"
+                and self.running
+                and self.current_phase != PHASES[-1].name
+            ),
+            "manual_tick": lambda: (
+                self.current_phase != "Source Code Input"
+                and not self.running
+                and not self.phase_completed
+                and self.current_phase != PHASES[-1].name
+            ),
+            "complete_step": lambda: (
+                self.current_phase != "Source Code Input"
+                and self.current_phase != PHASES[-1].name
+            ),
+            "restart_compiler": lambda: self.current_phase == PHASES[-1].name,
+        }
+
+    def _register_phase_handlers(self) -> None:
+        """Register all phase handlers with the phase manager."""
+        self.phase_manager.register_handler(
+            "Lexical Analysis: trimming", SourceTrimmingHandler()
+        )
+        self.phase_manager.register_handler(
+            "Lexical Analysis: tokenization", TokenizationHandler()
+        )
+        self.phase_manager.register_handler(
+            "Lexical Analysis: limited symbol table generation",
+            LimitedSymbolTableHandler(),
+        )
+        self.phase_manager.register_handler("Parsing: AST generation", ParsingHandler())
+        self.phase_manager.register_handler(
+            "Semantic Analysis: first pass", SemanticAnalysisFirstPassHandler()
+        )
+        self.phase_manager.register_handler(
+            "Semantic Analysis: second pass", SemanticAnalysisSecondPassHandler()
+        )
+        self.phase_manager.register_handler(
+            "Type Checking (strong)", TypeCheckingHandler()
+        )
+        self.phase_manager.register_handler("Code Generation", CodeGenerationHandler())
+
     def on_mount(self):
         """Initialize the application."""
-        self.ticker = self.set_interval(0.5, self.progress_tick, pause=True)
+        # Initialize ticker controller with the progress callback
+        self.ticker_controller.start(self.progress_tick)
 
         self.set_phase(PHASES[0])  # Start at the first phase
 
     def set_phase(self, phase: Phase):
         """Set the current phase of the compiler."""
         self.current_phase = phase.name
-        self._phase_subtitle_base = (
+        self.ui_state.phase_subtitle_base = (
             f"Step {phase.step_number}: {phase.name} - {phase.description}"
         )
         self._refresh_title_bar()
@@ -178,9 +413,17 @@ class CIEPseudocodeToPythonCompiler(App):
             "info",
         )
 
-        entering_method = entering_methods.get(phase.name)
-        if entering_method:
-            entering_method(self)
+        # Use phase manager to advance and call enter handler
+        phase_index = self.phase_manager.get_phase_index(phase.name)
+        if phase_index is not None:
+            context = PhaseContext(
+                app=self,
+                pipeline=self.pipeline,
+                left_panel=self.left_panel,
+                right_panel=self.right_panel,
+                fast_forward_mode=self._fast_forward_mode,
+            )
+            self.phase_manager.advance_to_phase(phase_index, context)
         self.phase_completed = False
         self.phase_failed = False
         self.running = False
@@ -189,65 +432,25 @@ class CIEPseudocodeToPythonCompiler(App):
         self.refresh_bindings()
 
     def _refresh_title_bar(self) -> None:
-        program_label = self.file_name if self.file_name else "(none)"
-        self.title = f"CIE Pseudocode to Python Compiler | Program: {program_label}"
-        self.subtitle = f"{self._phase_subtitle_base}"
+        """Refresh the title bar display."""
+        self.ui_state_manager.set_program_name(self.file_name)
+        self.ui_state_manager.set_phase_info(self.ui_state.phase_subtitle_base)
 
-    def _set_source_code_programmatically(self, code: str, *, program_name: str | None = None) -> None:
-        self._programmatic_source_set = True
-        self.left_panel.source_editor.text = code
+    def _set_source_code_programmatically(
+        self, code: str, *, program_name: str | None = None
+    ) -> None:
+        """Set source code programmatically (e.g., from file load).
         
+        Args:
+            code: Source code to set
+            program_name: Optional program name
+        """
+        self.ui_state.programmatic_source_set = True
+        self.left_panel.source_editor.text = code
+
         if program_name is not None:
             self.file_name = program_name
         self._refresh_title_bar()
-
-    def _is_hidden_dir(self, p: Path) -> bool:
-        hidden = {
-            "src",
-            "outputs",
-            "__pycache__",
-            ".vscode",
-            ".idea",
-            ".git",
-            ".github",
-            ".venv",
-            ".mypy_cache",
-            ".pytest_cache",
-            ".ruff_cache",
-            "scripts",
-        }
-        return p.name in hidden
-
-    def _should_show_file(self, p: Path) -> bool:
-        # Keep the browser focused on pseudocode source files.
-        return p.is_file() and p.suffix.lower() == ".txt"
-
-    def _populate_directory_tree(self) -> None:
-        tree = self.right_panel.directory_tree
-        tree.clear()
-
-        tree.root.label = str(self._project_root)
-        tree.root.data = self._project_root
-        tree.root.expand()
-
-        def add_dir(parent_node, directory: Path) -> None:
-            try:
-                entries = sorted(directory.iterdir(), key=lambda x: (not x.is_dir(), x.name.lower()))
-            except (PermissionError, FileNotFoundError):
-                return
-
-            for entry in entries:
-                if entry.is_dir():
-                    if self._is_hidden_dir(entry):
-                        continue
-                    child = parent_node.add(entry.name, data=entry)
-                    # Keep directories collapsed by default.
-                    add_dir(child, entry)
-                else:
-                    if self._should_show_file(entry):
-                        parent_node.add(entry.name, data=entry)
-
-        add_dir(tree.root, self._project_root)
 
     def on_tree_node_selected(self, event: Tree.NodeSelected) -> None:
         # Only handle selections when we're using the right-panel file browser.
@@ -256,35 +459,45 @@ class CIEPseudocodeToPythonCompiler(App):
         if self.right_panel.content_type != DynamicPanelContentType.DIRECTORY_TREE:
             return
 
-        node = event.node
-        data = getattr(node, "data", None)
-        if not isinstance(data, Path):
-            return
+        self._ensure_file_browser_controller()
+        if self.file_browser_controller:
+            node = event.node
+            data = getattr(node, "data", None)
+            if not isinstance(data, Path):
+                return
 
-        if data.is_dir():
+            # Let controller handle directory expansion
+            if data.is_dir():
+                try:
+                    node.toggle()
+                except Exception:
+                    pass
+                return
+
+            # Let controller validate file and load it
+            if not self.file_browser_controller.is_valid_source_file(data):
+                return
+
             try:
-                node.toggle()
-            except Exception:
-                pass
-            return
+                code = data.read_text(encoding="utf-8")
+            except Exception as e:
+                self.post_to_action_bar(f"Error loading file: {e}", "error")
+                return
 
-        if not self._should_show_file(data):
-            return
-
-        try:
-            code = data.read_text(encoding="utf-8")
-        except Exception as e:
-            self.post_to_action_bar(f"Error loading file: {e}", "error")
-            return
-
-        self._set_source_code_programmatically(code, program_name=data.stem)
+            self._set_source_code_programmatically(code, program_name=data.stem)
         self.right_panel.content_type = DynamicPanelContentType.HIDDEN
         self.post_to_action_bar(f"Loaded {data.name}.", "success")
 
     def on_text_area_changed(self, event: TextArea.Changed) -> None:
+        """Handle source code changes.
+        
+        Args:
+            event: TextArea change event
+        """
         if getattr(event.text_area, "id", None) != "source-code-editor":
             return
-        if self._programmatic_source_set:
+        if self.ui_state.programmatic_source_set:
+            self.ui_state.programmatic_source_set = False
             return
         if self.file_name:
             self.file_name = ""
@@ -296,9 +509,14 @@ class CIEPseudocodeToPythonCompiler(App):
 
     def progress_tick(self):
         """Progress one tick in the current stage."""
-        ticking_method = ticking_methods.get(self.current_phase)
-        if ticking_method:
-            self.phase_completed = ticking_method(self)
+        context = PhaseContext(
+            app=self,
+            pipeline=self.pipeline,
+            left_panel=self.left_panel,
+            right_panel=self.right_panel,
+            fast_forward_mode=self._fast_forward_mode,
+        )
+        self.phase_completed = self.phase_manager.tick_current_phase(context)
 
     def post_to_action_bar(self, message: str, style_class: str = "info"):
         """Post a message to the action bar with a specific style."""
@@ -308,9 +526,13 @@ class CIEPseudocodeToPythonCompiler(App):
         action_bar.add_class(style_class)
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
-        """Handle program name submission (used when starting trimming)."""
+        """Handle program name submission (used when starting trimming).
+        
+        Args:
+            event: Input submission event
+        """
         if event.input.id == "file-input":
-            if not self._awaiting_program_name:
+            if not self.ui_state.awaiting_program_name:
                 event.input.add_class("hidden")
                 return
 
@@ -325,7 +547,7 @@ class CIEPseudocodeToPythonCompiler(App):
                 return
 
             self.file_name = input_name
-            self._awaiting_program_name = False
+            self.ui_state.awaiting_program_name = False
             event.input.add_class("hidden")
             self._refresh_title_bar()
 
@@ -346,7 +568,9 @@ class CIEPseudocodeToPythonCompiler(App):
             return
 
         self.right_panel.content_type = DynamicPanelContentType.DIRECTORY_TREE
-        self._populate_directory_tree()
+        self._ensure_file_browser_controller()
+        if self.file_browser_controller:
+            self.file_browser_controller.populate_tree()
         try:
             self.right_panel.directory_tree.focus()
         except Exception:
@@ -355,20 +579,26 @@ class CIEPseudocodeToPythonCompiler(App):
 
     def action_start_lexing(self):
         """Start the lexing process."""
+        if not self.left_panel.source_editor.text.strip():
+            self.post_to_action_bar("Source code cannot be empty.", "error")
+            return
         self.set_phase(PHASES[1])  # Move to lexing phase
 
     def action_toggle_auto_progress(self):
         """Toggle automatic progress."""
-        self.running = not self.running
+        self.ticker_controller.toggle()
+        self.running = self.ticker_controller.is_running()
         self.refresh_bindings()
 
     def action_increase_speed(self):
         """Increase the speed of auto progress."""
-        self.tick_interval = max(0.1, self.tick_interval - 0.1)
+        self.ticker_controller.increase_speed()
+        self.tick_interval = self.ticker_controller.get_interval()
 
     def action_decrease_speed(self):
         """Decrease the speed of auto progress."""
-        self.tick_interval = self.tick_interval + 0.1
+        self.ticker_controller.decrease_speed()
+        self.tick_interval = self.ticker_controller.get_interval()
 
     def action_manual_tick(self):
         """Progress one tick manually."""
@@ -395,10 +625,17 @@ class CIEPseudocodeToPythonCompiler(App):
             self.running = False
             self._fast_forward_mode = True
             try:
-                ticking_method = ticking_methods.get(self.current_phase)
-                if ticking_method:
-                    while not self.phase_completed and not self.phase_failed:
-                        self.phase_completed = ticking_method(self)
+                context = PhaseContext(
+                    app=self,
+                    pipeline=self.pipeline,
+                    left_panel=self.left_panel,
+                    right_panel=self.right_panel,
+                    fast_forward_mode=self._fast_forward_mode,
+                )
+                while not self.phase_completed and not self.phase_failed:
+                    self.phase_completed = self.phase_manager.tick_current_phase(
+                        context
+                    )
             finally:
                 self._fast_forward_mode = False
 
@@ -413,501 +650,9 @@ class CIEPseudocodeToPythonCompiler(App):
             self._refresh_title_bar()
 
     def check_action(self, action: str, parameters: tuple[object, ...]) -> bool | None:
-        """Check if an action may run."""
-        if (
-            action == "load_file"
-            or action == "start_lexing"
-        ):
-            return self.current_phase == "Source Code Input"
-        elif action == "toggle_auto_progress":
-            return (
-                self.current_phase != "Source Code Input"
-                and self.phase_completed == False
-                and self.current_phase != PHASES[-1].name
-            )
-        if action in ["increase_speed", "decrease_speed"]:
-            return (
-                self.current_phase != "Source Code Input" 
-                and self.running
-                and self.current_phase != PHASES[-1].name
-            )
-        elif action == "manual_tick":
-            return (
-                self.current_phase != "Source Code Input"
-                and not self.running
-                and not self.phase_completed
-                and self.current_phase != PHASES[-1].name
-            )
-        elif action == "complete_step":
-            return (
-                self.current_phase != "Source Code Input"
-                and self.current_phase != PHASES[-1].name
-            )
-        elif action == "restart_compiler":
-            return self.current_phase == PHASES[-1].name
-        return True
-
-    def entering_source_trimming(self):
-        """Complete the source code input phase by initializing the trimming generator."""
-        self.source_code = self.left_panel.source_editor.text
-        self.right_panel.trimmed_display.text = ""
-        self.source_trimmed = ""
-        if not self.file_name:
-            self._awaiting_program_name = True
-            inputfield = self.query_one("#file-input", Input)
-            inputfield.placeholder = "Enter program name (no extension)..."
-            inputfield.remove_class("hidden")
-            inputfield.focus()
-            self.post_to_action_bar(
-                "Please enter a program name to continue.",
-                "error",
-            )
-            return
-
-        self._awaiting_program_name = False
-        self.pipeline.begin_trimming(self.source_code, file_name=self.file_name)
-
-    def compute_trimming_tick(self) -> bool:
-        """
-        Compute one tick of the trimming phase.
-        Returns:
-            bool: True if trimming is complete, False otherwise.
-        """
-        if getattr(self.pipeline, "_trimming_generator", None) is None:
-            return False
-
-        try:
-            done, report = self.pipeline.tick_trimming()
-            if done:
-                self.source_trimmed = self.pipeline.source_trimmed
-                if self._fast_forward_mode:
-                    try:
-                        self.right_panel.trimmed_display.text = self.source_trimmed
-                    except Exception:
-                        pass
-                return True  # Trimming complete
-
-            if report is None:
-                return False
-            self.source_trimmed = self.pipeline.source_trimmed
-            if not self._fast_forward_mode:
-                self.left_panel.source_editor.apply_progress_report(report)
-                self.right_panel.trimmed_display.apply_progress_report(trim_report=report)
-                self.post_to_action_bar(report.action_bar_message, "info")
-            return False  # Trimming not yet complete
-        except StopIteration:
-            self.source_trimmed = self.pipeline.source_trimmed
-            return True
-
-    def entering_tokenization(self):
-        """Prepare for tokenization phase."""
-        self.left_panel.trimmed_display.text = self.source_trimmed
-        self.right_panel.token_table.clear()
-        self.pipeline.begin_tokenization()
-
-    def compute_tokenization_tick(self) -> bool:
-        """
-        Compute one tick of the tokenization phase.
-        Returns:
-            bool: True if tokenization is complete, False otherwise.
-        """
-        try:
-            done, report = self.pipeline.tick_tokenization()
-            if done:
-                if self._fast_forward_mode:
-                    try:
-                        self.right_panel.token_table.fill_table(self.tokens)
-                    except Exception:
-                        pass
-                return True  # Tokenization complete
-            if report is None:
-                return False
-            if not self._fast_forward_mode:
-                self.right_panel.token_table.apply_progress_report(token_report=report)
-                self.left_panel.trimmed_display.apply_progress_report(token_report=report)
-                self.post_to_action_bar(report.action_bar_message, "info")
-            return False  # Tokenization not yet complete
-        
-        except StopIteration:
-            return True  # Tokenization complete
-        except LexingError as le:
-            self.error_message = str(le)
-            self.running = False
-            self.phase_failed = True
-            return True  # Stop tokenization on error
-
-    def entering_limited_symbol_table_generation(self):
-        """Prepare for limited symbol table generation phase."""
-        self.left_panel.token_table.fill_table(self.tokens)
-        self.pipeline.begin_limited_symbol_table()
-        self.symbol_table_limited = self.pipeline.symbol_table_limited
-        self.right_panel.limited_symbol_table.clear()
-
-    def compute_limited_symbol_table_tick(self) -> bool:
-        """
-        Compute one tick of the limited symbol table generation phase.
-        Returns:
-            bool: True if symbol table generation is complete, False otherwise.
-        """
-        try:
-            done, report = self.pipeline.tick_limited_symbol_table()
-            if done:
-                self.symbol_table_limited = self.pipeline.symbol_table_limited
-                if self._fast_forward_mode:
-                    try:
-                        self.right_panel.limited_symbol_table.clear()
-                        for sym in self.symbol_table_limited.symbols:
-                            self.right_panel.limited_symbol_table.add_symbol(sym)
-                    except Exception:
-                        pass
-                return True  # Symbol table generation complete
-            if report is None:
-                return False
-            if not self._fast_forward_mode:
-                self.left_panel.token_table.apply_progress_report(
-                    limited_symbol_table_report=report
-                )
-                self.right_panel.limited_symbol_table.apply_progress_report(
-                    limited_report=report
-                )
-                self.post_to_action_bar(report.action_bar_message, "info")
-            return False  # Symbol table generation not yet complete
-        except StopIteration:
-            return True  # Symbol table generation complete
-        except SemanticError as se:
-            self.error_message = str(se)
-            self.running = False
-            self.phase_failed = True
-            return True  # Stop symbol table generation on error
-
-    def entering_parsing(self):
-        """Prepare for parsing phase."""
-        self.left_panel.token_table.fill_table(self.tokens)
-        self.left_panel.token_table.move_cursor(row=0, scroll=True)
-        self.right_panel.ast_tree.reset_tree("global")
-
-        self.pipeline.begin_parsing(filename="ui")
-
-    def entering_semantic_analysis_first_pass(self):
-        """Prepare for semantic analysis (first pass)."""
-        if self.ast_root is None:
-            self.post_to_action_bar("No AST available. Run parsing first.", "error")
-            self.running = False
-            return
-        self.left_panel.ast_tree.build_from_ast_root(self.ast_root)
-        self.right_panel.complete_symbol_table.clear()
-        self.pipeline.ast_root = self.ast_root
-        self.pipeline.begin_first_pass()
-        self.symbol_table_complete = self.pipeline.symbol_table_complete
-
-    def entering_semantic_analysis_second_pass(self):
-        """Prepare for semantic analysis (second pass)."""
-        if self.ast_root is None:
-            self.post_to_action_bar("No AST available. Run parsing first.", "error")
-            self.running = False
-            return
-        # Show declared/lookup types as they are discovered (and mark expressions as Unverified).
-        self.left_panel.ast_tree.build_from_ast_root(self.ast_root, include_static_types=True)
-        self.left_panel.ast_tree.move_cursor_to_line(0, True)
-        self.right_panel.complete_symbol_table.move_cursor(row=0, scroll=True)
-        self.pipeline.ast_root = self.ast_root
-        self.pipeline.symbol_table_complete = self.symbol_table_complete
-        self.pipeline.begin_second_pass(line=0)
-
-    def entering_code_generation(self):
-        """Prepare for code generation."""
-        if self.ast_root is None:
-            self.post_to_action_bar("No AST available. Run parsing first.", "error")
-            self.running = False
-            return
-        self.left_panel.ast_tree.build_from_ast_root(self.ast_root)
-        self.right_panel.product_code_display.text = ""
-        self.pipeline.ast_root = self.ast_root
-        self.pipeline.file_name = self.file_name
-        self.pipeline.begin_code_generation(output_dir=Path("outputs") / self.file_name)
-
-    def entering_type_checking_strong(self):
-        """Prepare for strong type checking + inferred-type AST visualization."""
-        if self.ast_root is None:
-            self.post_to_action_bar("No AST available. Run parsing first.", "error")
-            self.running = False
-            return
-
-        # Show type tags immediately (expressions start as Unverified).
-        self.left_panel.ast_tree.build_from_ast_root(
-            self.ast_root,
-            include_static_types=True,
-        )
-
-        # Keep symbol table view available while checking.
-        try:
-            self.left_panel.ast_tree.move_cursor_to_line(0, True)
-            self.right_panel.complete_symbol_table.move_cursor(row=0, scroll=True)
-        except Exception:
-            pass
-
-        self.pipeline.ast_root = self.ast_root
-        self.pipeline.symbol_table_complete = self.symbol_table_complete
-        self.pipeline.begin_type_check()
-
-    def compute_type_checking_strong_tick(self) -> bool:
-        """Compute one tick of the strong type checking phase."""
-        if self.phase_failed:
-            return True
-        try:
-            done, report = self.pipeline.tick_type_check()
-            if done:
-                if self._fast_forward_mode and self.ast_root is not None:
-                    try:
-                        self.left_panel.ast_tree.build_from_ast_root(self.ast_root, include_static_types=True)
-                    except Exception:
-                        pass
-                self.post_to_action_bar("Type checking completed.", "success")
-                return True
-
-            if report is None:
-                return False
-
-            # Cursor tracking on the AST tree.
-            if not self._fast_forward_mode:
-                if report.looked_at_tree_node_id is not None:
-                    node = self.left_panel.ast_tree.get_node_by_id(
-                        cast(Any, report.looked_at_tree_node_id)
-                    )
-                    if node:
-                        self.left_panel.ast_tree.move_cursor(node)
-                        self.left_panel.ast_tree.scroll_to_node(node)
-
-                    # Refresh focused node (and subtree) labels in real time.
-                    try:
-                        self.left_panel.ast_tree.refresh_labels_for_tree_id(
-                            cast(Any, report.looked_at_tree_node_id),
-                            include_descendants=True,
-                        )
-                    except Exception:
-                        pass
-
-                if report.action_bar_message:
-                    self.post_to_action_bar(report.action_bar_message, "info")
-
-            if report.error:
-                self.error_message = str(report.error)
-                self.running = False
-                self.phase_failed = True
-                return True
-
-            return False
-        except StopIteration:
-            return True
-
-    def compute_parsing_tick(self) -> bool:
-        """
-        Compute one tick of the parsing phase.
-        Returns:
-            bool: True if parsing is complete, False otherwise.
-        """
-        try:
-            done, report = self.pipeline.tick_parsing()
-            if done:
-                self.ast_root = self.pipeline.ast_root
-                if self._fast_forward_mode and self.ast_root is not None:
-                    try:
-                        self.right_panel.ast_tree.build_from_ast_root(self.ast_root)
-                    except Exception:
-                        pass
-                self.post_to_action_bar("Parsing completed.", "success")
-                return True
-
-            if report is None:
-                return False
-
-            # Token cursor tracking
-            if not self._fast_forward_mode:
-                # Token cursor tracking
-                self.left_panel.token_table.apply_progress_report(parsing_report=report)
-
-                # Incremental AST tree building (supports incomplete nodes)
-                self.right_panel.ast_tree.apply_progress_report(parsing_report=report)
-
-                if report.action_bar_message:
-                    self.post_to_action_bar(report.action_bar_message, "info")
-
-            return False
-
-        except parser.ParsingError as e:
-            self.error_message = str(e)
-            self.running = False
-            self.phase_failed = True
-            return True
-
-    def compute_semantic_analysis_first_pass_tick(self) -> bool:
-        """
-        Compute one tick of the semantic analysis (first pass) phase.
-        Returns:
-            bool: True if semantic analysis is complete, False otherwise.
-        """
-        if self.phase_failed:
-            return True
-        try:
-            done, report = self.pipeline.tick_first_pass()
-            if done:
-                if self._fast_forward_mode and self.ast_root is not None:
-                    try:
-                        self.left_panel.ast_tree.build_from_ast_root(self.ast_root)
-                        self.right_panel.complete_symbol_table.clear()
-                        for sym in self.pipeline.symbol_table_complete.symbols:
-                            self.right_panel.complete_symbol_table.add_symbol(sym)
-                    except Exception:
-                        pass
-                self.post_to_action_bar(
-                    "Semantic analysis (first pass) completed.", "success"
-                )
-                return True
-
-            if report is None:
-                return False
-
-            # Token cursor tracking
-            if not self._fast_forward_mode:
-                # Token cursor tracking
-                self.left_panel.ast_tree.apply_progress_report(first_pass_report=report)
-
-                # Incremental AST tree building (supports incomplete nodes)
-                self.right_panel.complete_symbol_table.apply_progress_report(
-                    first_pass_report=report
-                )
-
-                if report.action_bar_message:
-                    self.post_to_action_bar(report.action_bar_message, "info")
-
-            if report.error:
-                self.error_message = str(report.error)
-                self.running = False
-                self.phase_failed = True
-                return True
-
-            return False
-        except StopIteration:
-            self.post_to_action_bar(
-                "Semantic analysis (first pass) completed.", "success"
-            )
-            return True
-
-    def compute_semantic_analysis_second_pass_tick(self) -> bool:
-        """
-        Compute one tick of the semantic analysis (second pass) phase.
-        Returns:
-            bool: True if semantic analysis is complete, False otherwise.
-        """
-        if self.phase_failed:
-            return True
-        try:
-            done, report = self.pipeline.tick_second_pass()
-            if done:
-                if self._fast_forward_mode and self.ast_root is not None:
-                    try:
-                        self.left_panel.ast_tree.build_from_ast_root(self.ast_root, include_static_types=True)
-                        self.right_panel.complete_symbol_table.clear()
-                        for sym in self.pipeline.symbol_table_complete.symbols:
-                            self.right_panel.complete_symbol_table.add_symbol(sym)
-                    except Exception:
-                        pass
-                self.post_to_action_bar(
-                    "Semantic analysis (second pass) completed.", "success"
-                )
-                return True
-
-            if report is None:
-                return False
-
-            # Token cursor tracking
-            if not self._fast_forward_mode:
-                # Token cursor tracking
-                self.left_panel.ast_tree.apply_progress_report(second_pass_report=report)
-
-                # Incremental AST tree building (supports incomplete nodes)
-                self.right_panel.complete_symbol_table.apply_progress_report(
-                    second_pass_report=report
-                )
-
-                if report.action_bar_message:
-                    self.post_to_action_bar(report.action_bar_message, "info")
-
-            if report.error:
-                self.error_message = str(report.error)
-                self.running = False
-                self.phase_failed = True
-                return True
-
-            return False
-        except StopIteration:
-            self.post_to_action_bar(
-                "Semantic analysis (second pass) completed.", "success"
-            )
-            return True
-
-    def compute_code_generation_tick(self) -> bool:
-        """
-        Compute one tick of the code generation phase.
-        Returns:
-            bool: True if code generation is complete, False otherwise.
-        """
-        if self.phase_failed:
-            return True
-        try:
-            done, report = self.pipeline.tick_code_generation()
-            if done:
-                # Ensure UI shows final product code after fast-forward.
-                if self._fast_forward_mode:
-                    try:
-                        self.right_panel.product_code_display.text = self.pipeline.output_code
-                    except Exception:
-                        pass
-                out_dir = Path("outputs") / self.file_name
-                out_dir.mkdir(parents=True, exist_ok=True)
-                with open(out_dir / f"{self.file_name}.py", "w", encoding="utf-8") as generated_file:
-                    generated_file.write(self.pipeline.output_code)
-                self.post_to_action_bar(
-                    f"Code generation completed. Output written to outputs/{self.file_name}/{self.file_name}.py.",
-                    "success",
-                )
-                return True
-
-            if report is None:
-                return False
-
-            if not self._fast_forward_mode:
-                # Cursor tracking on the AST tree and product code editor.
-                self.left_panel.ast_tree.apply_progress_report(code_generation_report=report)
-                self.right_panel.product_code_display.apply_progress_report(code_generation_report=report)
-                if report.action_bar_message:
-                    self.post_to_action_bar(report.action_bar_message, "info")
-            return False
-        except StopIteration:
-            return True
-
-
-ticking_methods = {
-    "Lexical Analysis: trimming": CIEPseudocodeToPythonCompiler.compute_trimming_tick,
-    "Lexical Analysis: tokenization": CIEPseudocodeToPythonCompiler.compute_tokenization_tick,
-    "Lexical Analysis: limited symbol table generation": CIEPseudocodeToPythonCompiler.compute_limited_symbol_table_tick,
-    "Parsing: AST generation": CIEPseudocodeToPythonCompiler.compute_parsing_tick,
-    "Semantic Analysis: first pass": CIEPseudocodeToPythonCompiler.compute_semantic_analysis_first_pass_tick,
-    "Semantic Analysis: second pass": CIEPseudocodeToPythonCompiler.compute_semantic_analysis_second_pass_tick,
-    "Type Checking (strong)": CIEPseudocodeToPythonCompiler.compute_type_checking_strong_tick,
-    "Code Generation": CIEPseudocodeToPythonCompiler.compute_code_generation_tick,
-}
-
-entering_methods = {
-    "Lexical Analysis: trimming": CIEPseudocodeToPythonCompiler.entering_source_trimming,
-    "Lexical Analysis: tokenization": CIEPseudocodeToPythonCompiler.entering_tokenization,
-    "Lexical Analysis: limited symbol table generation": CIEPseudocodeToPythonCompiler.entering_limited_symbol_table_generation,
-    "Parsing: AST generation": CIEPseudocodeToPythonCompiler.entering_parsing,
-    "Semantic Analysis: first pass": CIEPseudocodeToPythonCompiler.entering_semantic_analysis_first_pass,
-    "Semantic Analysis: second pass": CIEPseudocodeToPythonCompiler.entering_semantic_analysis_second_pass,
-    "Type Checking (strong)": CIEPseudocodeToPythonCompiler.entering_type_checking_strong,
-    "Code Generation": CIEPseudocodeToPythonCompiler.entering_code_generation,
-}
+        """Check if an action may run by consulting action rules."""
+        rule = self._action_rules.get(action)
+        return rule() if rule else True
 
 
 # Backwards-compatible alias (legacy class name).

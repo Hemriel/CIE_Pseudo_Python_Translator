@@ -8,7 +8,7 @@ from pathlib import Path
 from CompilerComponents.AST import ASTNode, Variable
 
 
-DIAGNOSTIC_OUTPUT = Path("diagnostic_unknown_identifiers.txt")
+DIAGNOSTIC_OUTPUT = Path("scripts/diagnostic_unknown_identifiers.txt")
 
 
 def clear_diagnostic_file() -> None:

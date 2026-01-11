@@ -142,7 +142,7 @@ def validate_output(
 
 def main(argv: list[str]) -> int:
     output_root = _REPO_ROOT / "outputs"
-    expected_file = _REPO_ROOT / "expected_outputs.json"
+    expected_file = _REPO_ROOT / "scripts" / "expected_outputs.json"
 
     # Clear diagnostic file at start of harness run
     clear_diagnostic_file()
