@@ -105,6 +105,15 @@
     ],
     "has_inputs": true
   },
+  "40_expr__arithmetic_ops": {
+    "stdout": "Addition (17 + 5) = 22\nSubtraction (17 - 5) = 12\nMultiplication (17 * 5) = 85\nDivision (17 / 5) = 3.4\nInteger division (17 DIV 5) = 3\nModulus (17 MOD 5) = 2",
+    "tags": [
+      "simple",
+      "no-io",
+      "no-input"
+    ],
+    "has_inputs": false
+  },
   "41_expr__relational_ops": {
     "stdout": "x = 10 y = 7\nx > y  => True\nx < y  => False\nx >= y => True\nx <= y => False\nx = y  => False\nx <> y => True",
     "tags": [
@@ -170,6 +179,15 @@
     ],
     "has_inputs": false
   },
+  "61_control__case": {
+    "stdout": "Enter a number (1..3):\nYou chose option 2\nEnter grade (A/B/C):\nGood",
+    "tags": [
+      "simple",
+      "no-io",
+      "no-input"
+    ],
+    "has_inputs": true
+  },
   "62_control__for": {
     "stdout": "Example 1: i from 1 to 5 (inclusive)\ni = 1\ni = 2\ni = 3\ni = 4\ni = 5\nExample 2: i from  2 + 1 to (10 DIV 2) + 3\ni = 3\ni = 4\ni = 5\ni = 6\ni = 7\ni = 8\nExample 3: runs once (value1 = value2)\nThis executes once; i = 3\nExample 4: does not execute (value1 > value2)\nExample 5: nested loops\nOuter i = 1\n  Inner j = 1\n  Inner j = 2\nOuter i = 2\n  Inner j = 1\n  Inner j = 2\nOuter i = 3\n  Inner j = 1\n  Inner j = 2\nExample 6: fill nums[1..5] with squares and sum them\nSum of squares = 55",
     "tags": [
@@ -178,6 +196,15 @@
       "no-input"
     ],
     "has_inputs": false
+  },
+  "63_control__repeat_until": {
+    "stdout": "Enter a positive limit (>= 1):\nCounter is now: 1\nCounter is now: 2\nCounter is now: 3",
+    "tags": [
+      "simple",
+      "no-io",
+      "no-input"
+    ],
+    "has_inputs": true
   },
   "64_control__while": {
     "stdout": "counter = 0\ncounter = 1\ncounter = 2\ncounter = 3\ncounter = 4",
@@ -211,6 +238,14 @@
     "tags": [
       "simple",
       "no-io",
+      "no-input"
+    ],
+    "has_inputs": false
+  },
+  "80_files__file_handling": {
+    "stdout": "First line\n\nSecond line\n\nAppended line\n\nRead: Hello from notes.txt\n\nRead: Another line",
+    "tags": [
+      "file-io",
       "no-input"
     ],
     "has_inputs": false

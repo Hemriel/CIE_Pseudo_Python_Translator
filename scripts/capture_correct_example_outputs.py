@@ -18,10 +18,6 @@ EXPECTED_FILE = Path("expected_outputs.json")
 
 # Examples to skip (file I/O, RNG, interactive input handled separately)
 SKIP_EXAMPLES = {
-    "80_files__file_handling",  # File I/O (phase 4)
-    "40_expr__arithmetic_ops",  # Skip for now (timeout)
-    "61_control__case",  # Timeout/complex
-    "63_control__repeat_until",  # Timeout/complex
     "long_example",  # Large program (not a unit test)
 }
 
