@@ -127,9 +127,9 @@ FUNCTION EvalNumeric(a : REAL, op : STRING, b : REAL) RETURNS REAL
             ENDIF
         "DIV":
             // Integer division (truncates toward -infinity in Python)
-            result <- a DIV b
+            result <- INT(a) DIV INT(b)
         "MOD":
-            result <- a MOD b
+            result <- INT(a) MOD INT(b)
         OTHERWISE:
             OUTPUT "Error: Unknown numeric operator."
             result <- 0
@@ -314,7 +314,7 @@ REPEAT
     OUTPUT "  3) Quit"
     OUTPUT "Enter choice (1/2/3):"
 
-    DECLARE choice : STRING
+    DECLARE choice : INTEGER
     INPUT choice
 
     IF choice = 2 THEN

@@ -1225,7 +1225,10 @@ class MidStringMethod(Expression):
 
 
 class LowerStringMethod(Expression):
-    """Built-in LCASE(char) char function.
+    """Built-in LCASE(x) function.
+
+    Project decision (diverges from CIE spec): accepts `CHAR` or `STRING` and returns
+    the same type as the argument.
 
     ```BNF:
         <primary> ::= 'LCASE' '(' <expression> ')'
@@ -1278,7 +1281,10 @@ class LowerStringMethod(Expression):
 
 
 class UpperStringMethod(Expression):
-    """Built-in UCASE(char) char function.
+    """Built-in UCASE(x) function.
+
+    Project decision (diverges from CIE spec): accepts `CHAR` or `STRING` and returns
+    the same type as the argument.
 
     ```BNF:
         <primary> ::= 'UCASE' '(' <expression> ')'

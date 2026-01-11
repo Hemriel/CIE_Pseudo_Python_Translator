@@ -1,0 +1,5 @@
+// LCASE/UCASE should reject non-stringy inputs
+
+DECLARE x : INTEGER
+x <- LCASE(5)
+OUTPUT x

@@ -79,6 +79,15 @@ PHASES = [
         right_panel_title="Complete symbol table"
     ),
     Phase(
+        name="Type Checking (strong)",
+        step_number="3.3",
+        description="Infer and validate expression types; visualize inferred types in the AST.",
+        left_panel_type=DynamicPanelContentType.AST_TREE,
+        left_panel_title="Abstract Syntax Tree (AST) — with inferred types",
+        right_panel_type=DynamicPanelContentType.COMPLETE_SYMBOL_TABLE,
+        right_panel_title="Complete symbol table"
+    ),
+    Phase(
         name="Code Generation",
         step_number="4",
         description="Generate target code from the AST.",

@@ -1,0 +1,23 @@
+// INPUT into primitive types should be accepted by the strong checker.
+// Note: Regression harness compiles only (does not execute), so no runtime input needed.
+
+DECLARE i : INTEGER
+DECLARE r : REAL
+DECLARE s : STRING
+DECLARE c : CHAR
+DECLARE b : BOOLEAN
+DECLARE d : DATE
+
+INPUT i
+INPUT r
+INPUT s
+INPUT c
+INPUT b
+INPUT d
+
+OUTPUT i
+OUTPUT r
+OUTPUT s
+OUTPUT c
+OUTPUT b
+OUTPUT d

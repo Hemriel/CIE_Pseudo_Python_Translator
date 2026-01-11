@@ -20,6 +20,7 @@ from textual.widgets import (
 )
 from textual.binding import Binding
 from textual.reactive import reactive
+from typing import Any, cast
 from CompilerComponents.Lexer import LexingError
 
 import CompilerComponents.Parser as parser
@@ -592,6 +593,65 @@ class CIEPseudocodeToPythonCompiler(App):
         self.pipeline.file_name = self.file_name
         self.pipeline.begin_code_generation(output_dir=Path("outputs") / self.file_name)
 
+    def entering_type_checking_strong(self):
+        """Prepare for strong type checking + inferred-type AST visualization."""
+        if self.ast_root is None:
+            self.post_to_action_bar("No AST available. Run parsing first.", "error")
+            self.running = False
+            return
+
+        # Keep symbol table view available while checking.
+        try:
+            self.left_panel.ast_tree.move_cursor_to_line(0, True)
+            self.right_panel.complete_symbol_table.move_cursor(row=0, scroll=True)
+        except Exception:
+            pass
+
+        self.pipeline.ast_root = self.ast_root
+        self.pipeline.symbol_table_complete = self.symbol_table_complete
+        self.pipeline.begin_type_check()
+
+    def compute_type_checking_strong_tick(self) -> bool:
+        """Compute one tick of the strong type checking phase."""
+        if self.phase_failed:
+            return True
+        try:
+            done, report = self.pipeline.tick_type_check()
+            if done:
+                # Rebuild the AST tree to visualize inferred static types.
+                if self.ast_root is not None:
+                    self.left_panel.ast_tree.build_from_ast_root(
+                        self.ast_root,
+                        include_static_types=True,
+                    )
+                self.post_to_action_bar("Type checking completed.", "success")
+                return True
+
+            if report is None:
+                return False
+
+            # Cursor tracking on the AST tree.
+            if report.looked_at_tree_node_id:
+                node = self.left_panel.ast_tree.get_node_by_id(
+                    cast(Any, report.looked_at_tree_node_id)
+                )
+                if node:
+                    self.left_panel.ast_tree.move_cursor(node)
+                    self.left_panel.ast_tree.scroll_to_node(node)
+
+            if report.action_bar_message:
+                self.post_to_action_bar(report.action_bar_message, "info")
+
+            if report.error:
+                self.error_message = str(report.error)
+                self.running = False
+                self.phase_failed = True
+                return True
+
+            return False
+        except StopIteration:
+            return True
+
     def compute_parsing_tick(self) -> bool:
         """
         Compute one tick of the parsing phase.
@@ -760,6 +820,7 @@ ticking_methods = {
     "Parsing: AST generation": CIEPseudocodeToPythonCompiler.compute_parsing_tick,
     "Semantic Analysis: first pass": CIEPseudocodeToPythonCompiler.compute_semantic_analysis_first_pass_tick,
     "Semantic Analysis: second pass": CIEPseudocodeToPythonCompiler.compute_semantic_analysis_second_pass_tick,
+    "Type Checking (strong)": CIEPseudocodeToPythonCompiler.compute_type_checking_strong_tick,
     "Code Generation": CIEPseudocodeToPythonCompiler.compute_code_generation_tick,
 }
 
@@ -770,6 +831,7 @@ entering_methods = {
     "Parsing: AST generation": CIEPseudocodeToPythonCompiler.entering_parsing,
     "Semantic Analysis: first pass": CIEPseudocodeToPythonCompiler.entering_semantic_analysis_first_pass,
     "Semantic Analysis: second pass": CIEPseudocodeToPythonCompiler.entering_semantic_analysis_second_pass,
+    "Type Checking (strong)": CIEPseudocodeToPythonCompiler.entering_type_checking_strong,
     "Code Generation": CIEPseudocodeToPythonCompiler.entering_code_generation,
 }
 

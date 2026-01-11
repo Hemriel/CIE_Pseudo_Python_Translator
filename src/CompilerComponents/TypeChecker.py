@@ -11,6 +11,7 @@ from CompilerComponents.AST import (
     Condition,
     CompositeDataType,
     EOFStatement,
+    Expression,
     ForStatement,
     FunctionCall,
     FunctionDefinition,
@@ -42,6 +43,7 @@ from CompilerComponents.AST import (
 from CompilerComponents.ProgressReport import TypeCheckReport
 from CompilerComponents.Symbols import SemanticError, Symbol, SymbolTable
 from CompilerComponents.TypeSystem import (
+    AnyPrimitiveType,
     ArrayType,
     CompositeType,
     ErrorType,
@@ -103,6 +105,8 @@ def get_type_check_reporter(
     current_scope: str = "global",
     function_return_type: Type | None = None,
     inside_procedure: bool = False,
+    annotate_all_expressions: bool = True,
+    _root_call: bool = True,
 ) -> Generator[TypeCheckReport, None, None]:
     """Strong type checker.
 
@@ -274,13 +278,19 @@ def get_type_check_reporter(
             return t
 
         if isinstance(expr, LowerStringMethod) or isinstance(expr, UpperStringMethod):
-            c_expr = expr.string_expr  # type: ignore[attr-defined]
-            c_t = infer_expr(c_expr, scope)
-            if not (isinstance(c_t, PrimitiveType) and c_t.name == "CHAR"):
+            s_expr = expr.string_expr  # type: ignore[attr-defined]
+            s_t = infer_expr(s_expr, scope)
+            if not is_stringy(s_t):
                 raise SemanticError(
-                    f"Line {expr.line}: Semantic error: LCASE/UCASE requires CHAR input (got {type_to_string(c_t)})."
+                    f"Line {expr.line}: Semantic error: LCASE/UCASE requires STRING or CHAR input (got {type_to_string(s_t)})."
                 )
-            t = PrimitiveType("CHAR")
+
+            # Divergent project decision: accept CHAR or STRING and return the same type.
+            if isinstance(s_t, PrimitiveType) and s_t.name in {"CHAR", "STRING"}:
+                t = s_t
+            else:
+                # Defensive fallback; is_stringy() should only accept CHAR/STRING.
+                t = PrimitiveType("STRING")
             expr.static_type = t
             return t
 
@@ -501,6 +511,36 @@ def get_type_check_reporter(
             f"Line {target.line}: Semantic error: invalid assignment target."
         )
 
+    def annotate_subtree_all_expr_types(node: ASTNode, scope: str) -> None:
+        """Best-effort full AST annotation pass.
+
+        Walks the AST via `edges` and forces `static_type` on all expression nodes.
+        This is intentionally separate from rule enforcement so the UI can inspect
+        inferred types everywhere.
+        """
+
+        # Respect function/procedure scope boundaries.
+        if isinstance(node, FunctionDefinition):
+            for child in getattr(node, "edges", []) or []:  # type: ignore[attr-defined]
+                if isinstance(child, ASTNode):
+                    annotate_subtree_all_expr_types(child, node.name)
+            return
+
+        # Declarations contain identifier nodes that are not "uses" and must not be
+        # looked up as variables during annotation.
+        if isinstance(node, (VariableDeclaration, CompositeDataType)):
+            return
+
+        # If it's an expression (or a condition wrapper), infer it and stop.
+        # Inference is responsible for visiting child expressions correctly.
+        if isinstance(node, Condition) or isinstance(node, Expression):
+            _ = infer_expr(node, scope)
+            return
+
+        for child in getattr(node, "edges", []) or []:  # type: ignore[attr-defined]
+            if isinstance(child, ASTNode):
+                annotate_subtree_all_expr_types(child, scope)
+
     # -------- traversal --------
 
     if ast_node is None:
@@ -518,7 +558,16 @@ def get_type_check_reporter(
                     current_scope=current_scope,
                     function_return_type=function_return_type,
                     inside_procedure=inside_procedure,
+                    annotate_all_expressions=annotate_all_expressions,
+                    _root_call=False,
                 )
+            # Root-only: after rule checks, force types on any remaining expression nodes.
+            if annotate_all_expressions and _root_call:
+                emit(ast_node, "Annotating remaining expression types...")
+                yield report
+                annotate_subtree_all_expr_types(ast_node, current_scope)
+                emit(ast_node, "Type annotation sweep completed.")
+                yield report
             return
 
         # Function/procedure definition
@@ -538,6 +587,8 @@ def get_type_check_reporter(
                 current_scope=ast_node.name,
                 function_return_type=declared_return,
                 inside_procedure=bool(ast_node.procedure),
+                annotate_all_expressions=annotate_all_expressions,
+                _root_call=False,
             )
             return
 
@@ -576,8 +627,14 @@ def get_type_check_reporter(
 
         # IO
         if isinstance(ast_node, InputStatement):
-            _ = infer_assignable_type(ast_node.variable, current_scope)
-            emit(ast_node, "INPUT statement checked.")
+            dst_t, _sym = infer_assignable_type(ast_node.variable, current_scope)
+            if not is_assignable(dst_t, AnyPrimitiveType()):
+                yield from fail(
+                    ast_node,
+                    f"INPUT target must be a primitive type (got {type_to_string(dst_t)})",
+                )
+                return
+            emit(ast_node, "INPUT statement checked.", inferred=dst_t)
             yield report
             return
 
@@ -644,6 +701,8 @@ def get_type_check_reporter(
                 current_scope=current_scope,
                 function_return_type=function_return_type,
                 inside_procedure=inside_procedure,
+                annotate_all_expressions=annotate_all_expressions,
+                _root_call=False,
             )
             if ast_node.else_branch:
                 yield from get_type_check_reporter(
@@ -652,6 +711,8 @@ def get_type_check_reporter(
                     current_scope=current_scope,
                     function_return_type=function_return_type,
                     inside_procedure=inside_procedure,
+                    annotate_all_expressions=annotate_all_expressions,
+                    _root_call=False,
                 )
             return
 
@@ -668,6 +729,8 @@ def get_type_check_reporter(
                 current_scope=current_scope,
                 function_return_type=function_return_type,
                 inside_procedure=inside_procedure,
+                annotate_all_expressions=annotate_all_expressions,
+                _root_call=False,
             )
             return
 
@@ -681,6 +744,8 @@ def get_type_check_reporter(
                 current_scope=current_scope,
                 function_return_type=function_return_type,
                 inside_procedure=inside_procedure,
+                annotate_all_expressions=annotate_all_expressions,
+                _root_call=False,
             )
             cond_t = infer_expr(ast_node.condition, current_scope)
             if not is_boolean(cond_t):
@@ -705,6 +770,8 @@ def get_type_check_reporter(
                 current_scope=current_scope,
                 function_return_type=function_return_type,
                 inside_procedure=inside_procedure,
+                annotate_all_expressions=annotate_all_expressions,
+                _root_call=False,
             )
             return
 
@@ -720,6 +787,8 @@ def get_type_check_reporter(
                     current_scope=current_scope,
                     function_return_type=function_return_type,
                     inside_procedure=inside_procedure,
+                    annotate_all_expressions=annotate_all_expressions,
+                    _root_call=False,
                 )
             return
 
@@ -754,6 +823,8 @@ def get_type_check_reporter(
                     current_scope=current_scope,
                     function_return_type=function_return_type,
                     inside_procedure=inside_procedure,
+                    annotate_all_expressions=annotate_all_expressions,
+                    _root_call=False,
                 )
         return
 

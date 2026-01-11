@@ -11,6 +11,7 @@ from CompilerComponents.ProgressReport import (
     CodeGenerationReport,
 )
 from CompilerComponents.AST import ASTNode
+from CompilerComponents.TypeSystem import type_to_string
 
 
 class ASTTree(Tree):
@@ -128,7 +129,26 @@ class ASTTree(Tree):
                 self.move_cursor(node)
                 self.scroll_to_node(node)
 
-    def build_from_ast_root(self, ast_root: ASTNode) -> None:
+    def _label_for_node(self, ast_node: ASTNode, *, include_static_types: bool) -> str:
+        base = ast_node.unindented_representation()
+        if not include_static_types:
+            return base
+
+        static_type = getattr(ast_node, "static_type", None)
+        if static_type is None:
+            return base
+
+        try:
+            type_str = type_to_string(static_type)
+        except Exception:
+            type_str = str(static_type)
+
+        if not type_str:
+            return base
+
+        return f"{base} :: {type_str}"
+
+    def build_from_ast_root(self, ast_root: ASTNode, *, include_static_types: bool = False) -> None:
         """Builds the entire tree from a given AST root node.
 
         Args:
@@ -137,11 +157,17 @@ class ASTTree(Tree):
 
         self.reset_tree(root_label="global")
         ast_root.unique_id = self.root.id
-        self._build_subtree(ast_root, self.root)
+        self._build_subtree(ast_root, self.root, include_static_types=include_static_types)
         self.root.expand()
         self._scroll_to_top()
 
-    def _build_subtree(self, ast_node: ASTNode, tree_node: TreeNode) -> None:
+    def _build_subtree(
+        self,
+        ast_node: ASTNode,
+        tree_node: TreeNode,
+        *,
+        include_static_types: bool,
+    ) -> None:
         """Recursively builds a subtree from a given AST node.
 
         Args:
@@ -150,8 +176,8 @@ class ASTTree(Tree):
         """
 
         for child in ast_node.edges:
-            child_label = child.unindented_representation()
+            child_label = self._label_for_node(child, include_static_types=include_static_types)
             child_tree_node = tree_node.add(Text(child_label, style="white"))
             child.unique_id = child_tree_node.id
             child_tree_node.expand()
-            self._build_subtree(child, child_tree_node)
+            self._build_subtree(child, child_tree_node, include_static_types=include_static_types)

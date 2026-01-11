@@ -115,8 +115,16 @@
     "examples/incorrect_examples/315_sem__double_declaration_case_insensitive.txt": {
       "expected_ok": false,
       "message": "Line 7: Double declaration: variable 'x' is already declared in the current scope."
+    },
+    "examples/incorrect_examples/410_type__lcase_integer.txt": {
+      "expected_ok": false,
+      "message": "Line 4: Semantic error: LCASE/UCASE requires STRING or CHAR input (got INTEGER)."
+    },
+    "examples/incorrect_examples/411_type__input_into_array.txt": {
+      "expected_ok": false,
+      "message": "Line 4: Semantic error: INPUT target must be a primitive type (got ARRAY[INTEGER])"
     }
   },
-  "generated_at": "2026-01-08T05:24:19Z",
+  "generated_at": "2026-01-09T07:25:26Z",
   "schema_version": 1
 }

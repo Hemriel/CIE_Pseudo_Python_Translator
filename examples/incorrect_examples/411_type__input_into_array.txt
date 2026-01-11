@@ -1,0 +1,4 @@
+// INPUT into a non-primitive should fail during type checking.
+
+DECLARE a : ARRAY[0:2] OF INTEGER
+INPUT a

@@ -1,0 +1,17 @@
+// LCASE/UCASE project decision demo
+// Accepts CHAR or STRING and returns the same type.
+
+DECLARE s : STRING
+DECLARE c : CHAR
+
+s <- "Hello"
+c <- 'a'
+
+DECLARE s2 : STRING
+DECLARE c2 : CHAR
+
+s2 <- LCASE(s)
+c2 <- UCASE(c)
+
+OUTPUT s2
+OUTPUT c2

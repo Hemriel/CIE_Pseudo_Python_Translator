@@ -23,6 +23,16 @@ class PrimitiveType(Type):
 
 
 @dataclass(frozen=True, slots=True)
+class AnyPrimitiveType(Type):
+    """Wildcard representing "some primitive".
+
+    This exists to model CIE's effectively untyped/overpowered INPUT semantics in a
+    strongly-typed checker: INPUT can yield any primitive, but it must not be used
+    to populate arrays/composites.
+    """
+
+
+@dataclass(frozen=True, slots=True)
 class ArrayType(Type):
     element: Type
     dimensions: Literal[1, 2]
@@ -61,6 +71,8 @@ def type_to_string(t: Type | None) -> str:
         return "NONE"
     if isinstance(t, PrimitiveType):
         return t.name
+    if isinstance(t, AnyPrimitiveType):
+        return "ANY_PRIMITIVE"
     if isinstance(t, ArrayType):
         prefix = "2D ARRAY" if t.dimensions == 2 else "ARRAY"
         return f"{prefix}[{type_to_string(t.element)}]"
@@ -140,6 +152,15 @@ def is_assignable(dst: Type, src: Type) -> bool:
 
     # Exact match
     if dst == src:
+        return True
+
+    # Wildcard primitive can assign into any primitive.
+    if isinstance(dst, PrimitiveType) and isinstance(src, AnyPrimitiveType):
+        return True
+
+    # Any-primitive can receive any primitive (useful if we ever annotate a variable
+    # as ANY_PRIMITIVE after INPUT).
+    if isinstance(dst, AnyPrimitiveType) and isinstance(src, PrimitiveType):
         return True
 
     # INTEGER -> REAL widening
