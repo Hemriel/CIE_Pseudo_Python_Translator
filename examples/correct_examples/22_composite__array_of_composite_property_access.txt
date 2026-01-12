@@ -1,0 +1,69 @@
+// TEST: array of composite type + property access on array element
+// EXPECTED: valid
+// BEHAVIOR_CAPTURED_BY_OUTPUT: array element property access (contacts[1].email, contacts[2].name)
+// Tests accessing properties of composite type elements in an array (like contacts[n].email)
+
+TYPE Contact
+    DECLARE name : STRING
+    DECLARE email : STRING
+    DECLARE phone : STRING
+ENDTYPE
+
+DECLARE contacts : ARRAY[1:3] OF Contact
+
+OUTPUT "===== Array of Composite Type Test ====="
+OUTPUT "Contact type defined with name, email, phone"
+OUTPUT "contacts is an array[1:3] of Contact"
+OUTPUT ""
+
+// Assign first contact
+contacts[1].name <- "Alice Smith"
+contacts[1].email <- "alice@example.com"
+contacts[1].phone <- "555-1234"
+
+OUTPUT "Contact 1:"
+OUTPUT "  Name: ", contacts[1].name
+OUTPUT "  Email: ", contacts[1].email
+OUTPUT "  Phone: ", contacts[1].phone
+OUTPUT ""
+
+// Assign second contact
+contacts[2].name <- "Bob Jones"
+contacts[2].email <- "bob@test.org"
+contacts[2].phone <- "555-5678"
+
+OUTPUT "Contact 2:"
+OUTPUT "  Name: ", contacts[2].name
+OUTPUT "  Email: ", contacts[2].email
+OUTPUT "  Phone: ", contacts[2].phone
+OUTPUT ""
+
+// Assign third contact with variables
+DECLARE tempName : STRING
+DECLARE tempEmail : STRING
+tempName <- "Carol White"
+tempEmail <- "carol@demo.net"
+
+contacts[3].name <- tempName
+contacts[3].email <- tempEmail
+contacts[3].phone <- "555-9012"
+
+OUTPUT "Contact 3:"
+OUTPUT "  Name: ", contacts[3].name
+OUTPUT "  Email: ", contacts[3].email
+OUTPUT "  Phone: ", contacts[3].phone
+OUTPUT ""
+
+// Read properties into variables
+DECLARE firstContactName : STRING
+DECLARE secondContactEmail : STRING
+
+firstContactName <- contacts[1].name
+secondContactEmail <- contacts[2].email
+
+OUTPUT "Extracted data:"
+OUTPUT "  First contact name: ", firstContactName
+OUTPUT "  Second contact email: ", secondContactEmail
+
+OUTPUT ""
+OUTPUT "===== Array of Composite Type Test Complete ====="

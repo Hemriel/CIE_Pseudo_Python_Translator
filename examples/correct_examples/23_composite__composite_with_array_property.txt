@@ -1,0 +1,76 @@
+// TEST: parallel arrays with composite type for metadata
+// EXPECTED: valid
+// BEHAVIOR_CAPTURED_BY_OUTPUT: using composite types alongside arrays for structured data
+// Tests a workaround pattern: composite type for metadata + separate arrays for collections
+
+TYPE StoreInfo
+    DECLARE storeName : STRING
+    DECLARE itemCount : INTEGER
+ENDTYPE
+
+DECLARE shop : StoreInfo
+DECLARE items : ARRAY[1:5] OF STRING
+DECLARE prices : ARRAY[1:5] OF REAL
+
+OUTPUT "===== Composite Type with Parallel Arrays Test ====="
+OUTPUT "StoreInfo type: storeName, itemCount"
+OUTPUT "Separate arrays: items (STRING), prices (REAL)"
+OUTPUT ""
+
+shop.storeName <- "Corner Market"
+shop.itemCount <- 3
+OUTPUT "Store name: ", shop.storeName
+OUTPUT "Item count: ", shop.itemCount
+OUTPUT ""
+
+// Assign items and prices to parallel arrays
+items[1] <- "Apple"
+prices[1] <- 1.50
+
+items[2] <- "Bread"
+prices[2] <- 2.99
+
+items[3] <- "Milk"
+prices[3] <- 3.49
+
+OUTPUT "Inventory:"
+OUTPUT "  Item 1: ", items[1], " - $", prices[1]
+OUTPUT "  Item 2: ", items[2], " - $", prices[2]
+OUTPUT "  Item 3: ", items[3], " - $", prices[3]
+OUTPUT ""
+
+// Use variables for indexing
+DECLARE itemIndex : INTEGER
+itemIndex <- 2
+
+OUTPUT "Using variable index (itemIndex = 2):"
+OUTPUT "  items[itemIndex] = ", items[itemIndex]
+OUTPUT "  prices[itemIndex] = ", prices[itemIndex]
+OUTPUT ""
+
+// Read array elements into variables
+DECLARE firstItem : STRING
+DECLARE firstPrice : REAL
+
+firstItem <- items[1]
+firstPrice <- prices[1]
+
+OUTPUT "Extracted from arrays:"
+OUTPUT "  First item: ", firstItem
+OUTPUT "  First price: ", firstPrice
+OUTPUT ""
+
+// Update existing element
+prices[2] <- 2.49
+OUTPUT "After price update: ", items[2], " now costs $", prices[2]
+OUTPUT ""
+
+// Update store metadata
+shop.itemCount <- shop.itemCount + 1
+items[4] <- "Eggs"
+prices[4] <- 4.25
+OUTPUT "Added item 4: ", items[4], " - $", prices[4]
+OUTPUT "New item count: ", shop.itemCount
+
+OUTPUT ""
+OUTPUT "===== Composite Type with Parallel Arrays Test Complete ====="

@@ -31,8 +31,12 @@ __all__ = [
 ### Type Keywords ###
 # Primitive types and array/composite type constructors
 
-CIE_TYPE_KEYWORDS = frozenset({
+CIE_PRIMITIVE_TYPES = frozenset({
     "INTEGER", "REAL", "STRING", "BOOLEAN", "DATE", "CHAR",
+})
+
+CIE_TYPE_KEYWORDS = frozenset({
+    *CIE_PRIMITIVE_TYPES,
     "ARRAY", "SET", "TYPE", "OF",
 })
 

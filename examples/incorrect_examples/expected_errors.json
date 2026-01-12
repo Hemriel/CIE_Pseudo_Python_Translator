@@ -74,7 +74,7 @@
     },
     "examples/incorrect_examples/305_sem__call_to_undeclared_subprogram.txt": {
       "expected_ok": false,
-      "message": "Line 7: Semantic error: function 'foo' not declared before use."
+      "message": "Line 7: Semantic error: no function 'foo' in scope 'global'."
     },
     "examples/incorrect_examples/306_sem__wrong_argument_count_function.txt": {
       "expected_ok": false,
@@ -125,6 +125,6 @@
       "message": "Line 4: Semantic error: INPUT target must be a primitive type (got ARRAY[INTEGER])"
     }
   },
-  "generated_at": "2026-01-09T07:25:26Z",
+  "generated_at": "2026-01-12T09:35:39Z",
   "schema_version": 1
 }

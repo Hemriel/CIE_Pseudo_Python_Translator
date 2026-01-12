@@ -1,0 +1,75 @@
+// TEST: nested composite types + chained property access
+// EXPECTED: valid
+// BEHAVIOR_CAPTURED_BY_OUTPUT: chained property access (company.CEO.name, company.CEO.salary)
+// Tests multiple levels of property access (like store.CEO.name)
+
+TYPE Employee
+    DECLARE name : STRING
+    DECLARE title : STRING
+    DECLARE salary : REAL
+ENDTYPE
+
+TYPE Company
+    DECLARE companyName : STRING
+    DECLARE CEO : Employee
+    DECLARE CTO : Employee
+ENDTYPE
+
+DECLARE techCorp : Company
+
+OUTPUT "===== Nested Composite Types Test ====="
+OUTPUT "Employee type: name, title, salary"
+OUTPUT "Company type: companyName, CEO (Employee), CTO (Employee)"
+OUTPUT ""
+
+techCorp.companyName <- "TechCorp Industries"
+OUTPUT "Company: ", techCorp.companyName
+OUTPUT ""
+
+// Assign CEO details
+techCorp.CEO.name <- "Jane Wilson"
+techCorp.CEO.title <- "Chief Executive Officer"
+techCorp.CEO.salary <- 250000.00
+
+OUTPUT "CEO Information:"
+OUTPUT "  Name: ", techCorp.CEO.name
+OUTPUT "  Title: ", techCorp.CEO.title
+OUTPUT "  Salary: $", techCorp.CEO.salary
+OUTPUT ""
+
+// Assign CTO details
+techCorp.CTO.name <- "John Chen"
+techCorp.CTO.title <- "Chief Technology Officer"
+techCorp.CTO.salary <- 220000.00
+
+OUTPUT "CTO Information:"
+OUTPUT "  Name: ", techCorp.CTO.name
+OUTPUT "  Title: ", techCorp.CTO.title
+OUTPUT "  Salary: $", techCorp.CTO.salary
+OUTPUT ""
+
+// Read nested properties into variables
+DECLARE ceoName : STRING
+DECLARE ctoSalary : REAL
+
+ceoName <- techCorp.CEO.name
+ctoSalary <- techCorp.CTO.salary
+
+OUTPUT "Extracted nested data:"
+OUTPUT "  CEO name: ", ceoName
+OUTPUT "  CTO salary: $", ctoSalary
+OUTPUT ""
+
+// Use nested property in expression
+DECLARE totalExecutiveSalary : REAL
+totalExecutiveSalary <- techCorp.CEO.salary + techCorp.CTO.salary
+
+OUTPUT "Total executive compensation: $", totalExecutiveSalary
+OUTPUT ""
+
+// Update nested property
+techCorp.CEO.salary <- 275000.00
+OUTPUT "After CEO raise: ", techCorp.CEO.name, " now earns $", techCorp.CEO.salary
+
+OUTPUT ""
+OUTPUT "===== Nested Composite Types Test Complete ====="

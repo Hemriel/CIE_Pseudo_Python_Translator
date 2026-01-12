@@ -2,6 +2,7 @@ from CompilerComponents.ProgressReport import FirstPassReport, SecondPassReport
 from collections.abc import Generator
 from CompilerComponents.Symbols import SemanticError, Symbol, SymbolTable
 from CompilerComponents.TypeSystem import parse_symbol_type, parse_type_name
+from CompilerComponents.CIEKeywords import CIE_PRIMITIVE_TYPES
 from CompilerComponents.AST import (
     ASTNode,
     AssignmentStatement,
@@ -42,882 +43,1662 @@ from CompilerComponents.AST import (
     WhileStatement,
     WriteFileStatement,
 )
+from CompilerComponents.Types import ASTNodeId
+
+### Semantic Analysis Helper Functions ###
+
+
+def _is_built_in_type(type_str: str) -> bool:
+    """Check if a type string is a built-in primitive type.
+
+    Args:
+        type_str: Type name to check (e.g., "INTEGER", "STRING")
+
+    Returns:
+        True if type_str is a built-in primitive type, False otherwise
+    """
+    return type_str in CIE_PRIMITIVE_TYPES
+
+
+def _annotate_symbol_use(var_node: Variable, sym: Symbol) -> None:
+    """Annotate a Variable node with resolved symbol metadata.
+
+    Populates basic symbol/type information for UI visualization and type tracking.
+
+    Args:
+        var_node: Variable AST node to annotate
+        sym: Symbol table entry for the variable
+    """
+    try:
+        var_node.type = sym.data_type
+    except Exception:
+        pass
+    try:
+        var_node.static_type = parse_symbol_type(sym.data_type)
+    except Exception:
+        pass
+    var_node.resolved_symbol = sym
+    var_node.resolved_scope = sym.scope
+
+
+def _annotate_node_type(node: ASTNode, type_str: str) -> None:
+    """Annotate an AST node with inferred static type.
+
+    Args:
+        node: AST node to annotate
+        type_str: Type string (e.g., "INTEGER", "ARRAY[INTEGER]")
+    """
+    try:
+        node.static_type = parse_symbol_type(type_str)
+    except Exception:
+        try:
+            node.static_type = parse_type_name(type_str)
+        except Exception:
+            pass
+
+
+def _get_base_type(expr: ASTNode) -> str | None:
+    """Extract the static type string from a processed expression.
+
+    Args:
+        expr: Expression node to extract type from
+
+    Returns:
+        Type string if successfully extracted, None otherwise
+    """
+    if hasattr(expr, "static_type") and expr.static_type:
+        from CompilerComponents.TypeSystem import type_to_string
+
+        return type_to_string(expr.static_type)
+    return None
+
+
+def _annotate_variable_declaration(
+    var: Variable, sym: Symbol, type_str: str, scope: str
+) -> None:
+    """Annotate a declared variable with type and symbol metadata.
+
+    Args:
+        var: Variable node being declared
+        sym: Symbol table entry for the variable
+        type_str: Declared type string
+        scope: Current scope name
+    """
+    try:
+        var.type = type_str
+    except Exception:
+        pass
+    try:
+        var.static_type = parse_symbol_type(type_str)
+    except Exception:
+        try:
+            var.static_type = parse_type_name(type_str)
+        except Exception:
+            pass
+    var.resolved_symbol = sym
+    var.resolved_scope = scope
+
+
+### Report Creation Helpers ###
+
+
+def _yield_first_pass_report(
+    action_message: str,
+    node_id: ASTNodeId | None = None,
+    new_symbol: Symbol | None = None,
+    looked_at_symbol: Symbol | None = None,
+    error: SemanticError | None = None,
+) -> Generator[FirstPassReport, None, None]:
+    """Create and yield a FirstPassReport with the specified fields.
+
+    Args:
+        action_message: Message for the action bar
+        node_id: AST node unique_id to highlight (optional)
+        new_symbol: Newly declared symbol (optional)
+        looked_at_symbol: Symbol being examined (optional)
+        error: Semantic error if validation failed (optional)
+
+    Yields:
+        Configured FirstPassReport
+    """
+    report = FirstPassReport()
+    report.action_bar_message = action_message
+    if node_id is not None:
+        report.looked_at_tree_node_id = node_id
+    if new_symbol is not None:
+        report.new_symbol = new_symbol
+    if error is not None:
+        report.error = error
+    yield report
+
+
+def _yield_second_pass_report(
+    action_message: str,
+    node_id: ASTNodeId | None = None,
+    looked_at_symbol: Symbol | None = None,
+    error: SemanticError | None = None,
+) -> Generator[SecondPassReport, None, None]:
+    """Create and yield a SecondPassReport with the specified fields.
+
+    Args:
+        action_message: Message for the action bar
+        node_id: AST node unique_id to highlight (optional)
+        looked_at_symbol: Symbol being examined (optional)
+        error: Semantic error if validation failed (optional)
+
+    Yields:
+        Configured SecondPassReport
+    """
+    report = SecondPassReport()
+    report.action_bar_message = action_message
+    if node_id is not None:
+        report.looked_at_tree_node_id = node_id
+    if looked_at_symbol is not None:
+        report.looked_at_symbol = looked_at_symbol
+    if error is not None:
+        report.error = error
+    yield report
+
 
 ### Semantic analysis of the parsed AST ###
 
+### FIRST PASS HANDLERS (Declaration Collection) ###
 
-def get_first_pass_reporter(ast_node, sym_table: SymbolTable, current_scope="global") -> Generator[FirstPassReport, None, None]:
+
+## Base Case Handler ##
+# Handles nodes with no declarations or special processing
+# covers following AST nodes:
+#   - All other AST nodes (Literal, Variable, Expression types, etc.)
+#   - Fallback for nodes not in FIRST_PASS_HANDLERS dispatch table
+
+
+def _handle_fp_noop(
+    ast_node, sym_table: SymbolTable, current_scope: str
+) -> Generator[FirstPassReport, None, None]:
+    """Handler for nodes that contain no declarations (base case)."""
+    yield from _yield_first_pass_report(
+        "Node encountered; no declarations.", node_id=ast_node.unique_id
+    )
+
+
+## Declaration Handlers ##
+# covers following AST nodes:
+#   - VariableDeclaration
+#   - OneArrayDeclaration
+#   - TwoArrayDeclaration
+#   - FunctionDefinition
+#   - CompositeDataType
+
+
+def _handle_fp_variable_declaration(
+    ast_node: VariableDeclaration, sym_table: SymbolTable, current_scope: str
+) -> Generator[FirstPassReport, None, None]:
+    """Handler for DECLARE statements - processes variable declarations."""
+    yield from _yield_first_pass_report(
+        "Processing variable declaration.", node_id=ast_node.unique_id
+    )
+    for var in ast_node.variables:
+        var_name = var.name
+        var_line = ast_node.line
+        sym = Symbol(
+            var_name,
+            var_line,
+            ast_node.var_type,
+            ast_node.is_constant,
+            current_scope,
+            assigned=False,
+        )
+        try:
+            sym_table.declare_symbol(sym)
+        except SemanticError as e:
+            yield from _yield_first_pass_report(
+                f"Declaring {'constant' if ast_node.is_constant else 'variable'} '{var_name}'.",
+                node_id=var.unique_id,
+                error=e,
+            )
+            return
+        _annotate_variable_declaration(var, sym, ast_node.var_type, current_scope)
+        yield from _yield_first_pass_report(
+            f"Declaring {'constant' if ast_node.is_constant else 'variable'} '{var_name}'.",
+            node_id=var.unique_id,
+            new_symbol=sym,
+        )
+
+
+def _handle_fp_one_array_declaration(
+    ast_node: OneArrayDeclaration, sym_table: SymbolTable, current_scope: str
+) -> Generator[FirstPassReport, None, None]:
+    """Handler for one-dimensional array declarations."""
+    yield from _yield_first_pass_report(
+        "Processing one-dimensional array declaration.", node_id=ast_node.unique_id
+    )
+    for var in ast_node.variable:
+        var_name = var.name
+        var_line = ast_node.line
+        array_type = f"ARRAY[{ast_node.var_type}]"
+        sym = Symbol(
+            var_name,
+            var_line,
+            array_type,
+            getattr(ast_node, "is_constant", False),
+            current_scope,
+            assigned=False,
+        )
+        try:
+            sym_table.declare_symbol(sym)
+        except SemanticError as e:
+            yield from _yield_first_pass_report(
+                f"Declaring array '{var_name}'.", node_id=var.unique_id, error=e
+            )
+            return
+        _annotate_variable_declaration(var, sym, array_type, current_scope)
+        yield from _yield_first_pass_report(
+            f"Declaring array '{var_name}'.", node_id=var.unique_id, new_symbol=sym
+        )
+
+
+def _handle_fp_two_array_declaration(
+    ast_node: TwoArrayDeclaration, sym_table: SymbolTable, current_scope: str
+) -> Generator[FirstPassReport, None, None]:
+    """Handler for two-dimensional array declarations."""
+    yield from _yield_first_pass_report(
+        "Processing two-dimensional array declaration.", node_id=ast_node.unique_id
+    )
+    for var in ast_node.variable:
+        var_name = var.name
+        var_line = ast_node.line
+        array_type = f"2D ARRAY[{ast_node.var_type}]"
+        sym = Symbol(
+            var_name,
+            var_line,
+            array_type,
+            getattr(ast_node, "is_constant", False),
+            current_scope,
+            assigned=False,
+        )
+        try:
+            sym_table.declare_symbol(sym)
+        except SemanticError as e:
+            yield from _yield_first_pass_report(
+                f"Declaring 2D array '{var_name}'.", node_id=var.unique_id, error=e
+            )
+            return
+        _annotate_variable_declaration(var, sym, array_type, current_scope)
+        yield from _yield_first_pass_report(
+            f"Declaring 2D array '{var_name}'.", node_id=var.unique_id, new_symbol=sym
+        )
+
+
+def _handle_fp_function_definition(
+    ast_node: FunctionDefinition, sym_table: SymbolTable, current_scope: str
+) -> Generator[FirstPassReport, None, None]:
+    """Handler for FUNCTION/PROCEDURE definitions."""
+    func_name = ast_node.name
+    func_line = ast_node.line
+
+    # Enforce CALL/function separation
+    if ast_node.procedure:
+        if ast_node.return_type is not None:
+            yield from _yield_first_pass_report(
+                f"Declaring function definition '{func_name}'.",
+                node_id=ast_node.unique_id,
+                error=SemanticError(
+                    f"Line {func_line}: Semantic error: PROCEDURE '{func_name}' must not declare a return type."
+                ),
+            )
+            return
+    else:
+        if ast_node.return_type is None:
+            yield from _yield_first_pass_report(
+                f"Declaring function definition '{func_name}'.",
+                node_id=ast_node.unique_id,
+                error=SemanticError(
+                    f"Line {func_line}: Semantic error: FUNCTION '{func_name}' must declare a return type (use: RETURNS <type>)."
+                ),
+            )
+            return
+
+    params = [(param.name, param.arg_type) for param in ast_node.parameters]
+    sym = Symbol(
+        func_name,
+        func_line,
+        "function",
+        False,
+        current_scope,
+        parameters=params,
+        return_type=(ast_node.return_type.type_name if ast_node.return_type else None),
+    )
+    try:
+        sym_table.declare_symbol(sym)
+    except SemanticError as e:
+        yield from _yield_first_pass_report(
+            f"Declaring function definition '{func_name}'.",
+            node_id=ast_node.unique_id,
+            error=e,
+        )
+        return
+    yield from _yield_first_pass_report(
+        f"Declaring function definition '{func_name}'.",
+        node_id=ast_node.unique_id,
+        new_symbol=sym,
+    )
+
+    # Enter function scope and process parameters
+    new_scope = sym_table.enter_scope(func_name, current_scope)
+    for param in ast_node.parameters:
+        param_name = param.name
+        param_line = ast_node.line
+        sym = Symbol(
+            param_name,
+            param_line,
+            param.arg_type,
+            False,
+            new_scope,
+        )
+        try:
+            sym_table.declare_symbol(sym)
+        except SemanticError as e:
+            yield from _yield_first_pass_report(
+                f"Declaring function parameter '{param.name}'.",
+                node_id=param.unique_id,
+                error=e,
+            )
+            return
+        try:
+            if isinstance(param, Variable):
+                _annotate_variable_declaration(param, sym, param.arg_type, new_scope)
+        except Exception:
+            pass
+        yield from _yield_first_pass_report(
+            f"Declaring function parameter '{param.name}'.",
+            node_id=param.unique_id,
+            new_symbol=sym,
+        )
+    yield from get_first_pass_reporter(
+        ast_node.body, sym_table, current_scope=new_scope
+    )
+
+
+def _handle_fp_composite_data_type(
+    ast_node: CompositeDataType, sym_table: SymbolTable, current_scope: str
+) -> Generator[FirstPassReport, None, None]:
+    """Handler for TYPE definitions."""
+    type_name = ast_node.name
+    type_line = ast_node.line
+    sym = Symbol(
+        type_name,
+        type_line,
+        "composite",
+        False,
+        current_scope,
+        parameters=[(field.name, field.type) for field in ast_node.fields],
+    )
+    try:
+        sym_table.declare_symbol(sym)
+    except SemanticError as e:
+        yield from _yield_first_pass_report(
+            f"Declaring composite data type '{ast_node.name}'.",
+            node_id=ast_node.unique_id,
+            error=e,
+        )
+        return
+    yield from _yield_first_pass_report(
+        f"Declaring composite data type '{ast_node.name}'.",
+        node_id=ast_node.unique_id,
+        new_symbol=sym,
+    )
+
+    # Enter composite type scope
+    new_scope = sym_table.enter_scope(type_name, current_scope)
+    for variable in ast_node.fields:
+        field_name = variable.name
+        field_line = ast_node.line
+        sym = Symbol(
+            field_name,
+            field_line,
+            variable.type,
+            False,
+            new_scope,
+        )
+        try:
+            sym_table.declare_symbol(sym)
+        except SemanticError as e:
+            yield from _yield_first_pass_report(
+                f"Declaring composite type field '{variable.name}'.",
+                node_id=variable.unique_id,
+                error=e,
+            )
+            return
+        _annotate_node_type(variable, variable.type)
+        variable.resolved_symbol = sym
+        variable.resolved_scope = new_scope
+        yield from _yield_first_pass_report(
+            f"Declaring composite type field '{variable.name}'.",
+            node_id=variable.unique_id,
+            new_symbol=sym,
+        )
+
+
+## Control Flow Handlers ##
+# covers following AST nodes:
+#   - IfStatement
+#   - ForStatement
+#   - WhileStatement
+#   - PostWhileStatement
+#   - CaseStatement
+
+
+def _handle_fp_if_statement(
+    ast_node: IfStatement, sym_table: SymbolTable, current_scope: str
+) -> Generator[FirstPassReport, None, None]:
+    """Handler for IF statements - process both branches."""
+    yield from _yield_first_pass_report(
+        "Processing IF statement. Skipping condition for first pass.",
+        node_id=ast_node.unique_id,
+    )
+    yield from get_first_pass_reporter(ast_node.then_branch, sym_table, current_scope)
+    if ast_node.else_branch:
+        yield from get_first_pass_reporter(
+            ast_node.else_branch, sym_table, current_scope
+        )
+
+
+def _handle_fp_for_statement(
+    ast_node: ForStatement, sym_table: SymbolTable, current_scope: str
+) -> Generator[FirstPassReport, None, None]:
+    """Handler for FOR statements - process loop body."""
+    yield from get_first_pass_reporter(ast_node.body, sym_table, current_scope)
+
+
+def _handle_fp_while_statement(
+    ast_node: WhileStatement, sym_table: SymbolTable, current_scope: str
+) -> Generator[FirstPassReport, None, None]:
+    """Handler for WHILE statements."""
+    yield from _yield_first_pass_report(
+        "Processing WHILE statement. Skipping condition for first pass.",
+        node_id=ast_node.unique_id,
+    )
+    yield from get_first_pass_reporter(ast_node.body, sym_table, current_scope)
+
+
+def _handle_fp_post_while_statement(
+    ast_node: PostWhileStatement, sym_table: SymbolTable, current_scope: str
+) -> Generator[FirstPassReport, None, None]:
+    """Handler for REPEAT...UNTIL (post-while) statements."""
+    yield from _yield_first_pass_report(
+        "Processing POST-WHILE statement. Skipping condition for first pass.",
+        node_id=ast_node.unique_id,
+    )
+    yield from get_first_pass_reporter(ast_node.body, sym_table, current_scope)
+
+
+def _handle_fp_case_statement(
+    ast_node: CaseStatement, sym_table: SymbolTable, current_scope: str
+) -> Generator[FirstPassReport, None, None]:
+    """Handler for CASE statements - process all case bodies."""
+    yield from _yield_first_pass_report(
+        "Processing CASE statement. Skipping case variable for first pass.",
+        node_id=ast_node.unique_id,
+    )
+    for case_body in ast_node.cases.values():
+        yield from get_first_pass_reporter(case_body, sym_table, current_scope)
+
+
+## Statement Collection Handlers ##
+# covers following AST nodes:
+#   - Statements
+#   - AssignmentStatement (CONSTANT declarations only)
+#   - InputStatement (CONSTANT declarations only)
+
+
+def _handle_fp_statements(
+    ast_node: Statements, sym_table: SymbolTable, current_scope: str
+) -> Generator[FirstPassReport, None, None]:
+    """Handler for statement blocks - recurse on each statement."""
+    for stmt in ast_node.statements:
+        yield from get_first_pass_reporter(stmt, sym_table, current_scope)
+
+
+def _handle_fp_assignment_or_input(
+    ast_node, sym_table: SymbolTable, current_scope: str
+) -> Generator[FirstPassReport, None, None]:
+    """Handler for assignments and inputs - handles CONSTANT declarations via assignment."""
+
+    # Treat `CONSTANT x = <literal>` as a declaration
+    if (
+        isinstance(ast_node, AssignmentStatement)
+        and getattr(ast_node, "is_constant_declaration", False)
+        and isinstance(ast_node.variable, Variable)
+    ):
+        var_name = ast_node.variable.name
+        var_line = ast_node.line
+        if not isinstance(ast_node.expression, Literal):
+            yield from _yield_first_pass_report(
+                f"Declaring constant '{var_name}' (constants are declared with CONSTANT and can only be assigned once).",
+                node_id=ast_node.unique_id,
+                error=SemanticError(
+                    f"Line {var_line}: Semantic error: constants must be assigned a literal value (use: CONSTANT {var_name} = <literal>)."
+                ),
+            )
+            return
+        const_type = ast_node.expression.type
+        sym = Symbol(
+            var_name,
+            var_line,
+            const_type,
+            True,
+            current_scope,
+            assigned=True,
+        )
+        try:
+            sym_table.declare_symbol(sym)
+        except SemanticError as e:
+            yield from _yield_first_pass_report(
+                f"Declaring constant '{var_name}' (constants are declared with CONSTANT and can only be assigned once).",
+                node_id=ast_node.unique_id,
+                error=e,
+            )
+            return
+        _annotate_variable_declaration(
+            ast_node.variable, sym, const_type, current_scope
+        )
+        yield from _yield_first_pass_report(
+            f"Declaring constant '{var_name}' (constants are declared with CONSTANT and can only be assigned once).",
+            node_id=ast_node.unique_id,
+            new_symbol=sym,
+        )
+        return
+
+    yield from _yield_first_pass_report(
+        "Assignment/Input encountered; no declarations.", node_id=ast_node.unique_id
+    )
+
+
+### FIRST PASS DISPATCH TABLE ###
+
+# Maps AST node types to first-pass handlers
+FIRST_PASS_HANDLERS = {
+    VariableDeclaration: _handle_fp_variable_declaration,
+    OneArrayDeclaration: _handle_fp_one_array_declaration,
+    TwoArrayDeclaration: _handle_fp_two_array_declaration,
+    FunctionDefinition: _handle_fp_function_definition,
+    CompositeDataType: _handle_fp_composite_data_type,
+    Statements: _handle_fp_statements,
+    IfStatement: _handle_fp_if_statement,
+    ForStatement: _handle_fp_for_statement,
+    WhileStatement: _handle_fp_while_statement,
+    PostWhileStatement: _handle_fp_post_while_statement,
+    CaseStatement: _handle_fp_case_statement,
+    AssignmentStatement: _handle_fp_assignment_or_input,
+    InputStatement: _handle_fp_assignment_or_input,
+}
+
+
+### FIRST PASS PUBLIC API ###
+
+
+def get_first_pass_reporter(
+    ast_node, sym_table: SymbolTable, current_scope="global"
+) -> Generator[FirstPassReport, None, None]:
     """First pass semantic analysis: variable declarations.
     Draws up the symbol table.
+
+    Routes AST nodes to specialized handlers via dispatch table.
     """
-    report = FirstPassReport()
-
-    # Base cases
+    # Handle None
     if ast_node is None:
-        report.action_bar_message = "No node to process."
-        yield report
-    elif (
-        isinstance(ast_node, Literal)
-        or isinstance(ast_node, Variable)
-        or isinstance(ast_node, OutputStatement)
-    ):
-        report.action_bar_message = "Literal/Variable/OutputStatement encountered; no declarations."
-        report.looked_at_tree_node_id = ast_node.unique_id
-        yield report
-    elif isinstance(ast_node, BinaryExpression) or isinstance(
-        ast_node, UnaryExpression
-    ):
-        report.action_bar_message = "Expression encountered; no declarations."
-        report.looked_at_tree_node_id = ast_node.unique_id
-        yield report
-    elif isinstance(ast_node, FunctionCall):
-        report.action_bar_message = "Function call encountered; no declarations."
-        report.looked_at_tree_node_id = ast_node.unique_id
-        yield report
-    elif isinstance(ast_node, ReturnStatement):
-        report.action_bar_message = "Return statement encountered; no declarations."
-        report.looked_at_tree_node_id = ast_node.unique_id
-        yield report
-    elif (
-        isinstance(ast_node, OpenFileStatement)
-        or isinstance(ast_node, CloseFileStatement)
-        or isinstance(ast_node, ReadFileStatement)
-        or isinstance(ast_node, WriteFileStatement)
-    ):
-        report.action_bar_message = "File operation encountered; no declarations."
-        report.looked_at_tree_node_id = ast_node.unique_id
-        yield report
-    elif isinstance(ast_node, AssignmentStatement) or isinstance(
-        ast_node, InputStatement
-    ):
-        # Treat `CONSTANT x = <literal>` as a declaration.
-        if (
-            isinstance(ast_node, AssignmentStatement)
-            and getattr(ast_node, "is_constant_declaration", False)
-            and isinstance(ast_node.variable, Variable)
+        yield from _yield_first_pass_report("No node to process.")
+        return
+
+    # Look up handler in dispatch table
+    handler = FIRST_PASS_HANDLERS.get(type(ast_node))
+    if handler:
+        yield from handler(ast_node, sym_table, current_scope)
+    else:
+        # Base case: nodes with no declarations (Literal, Variable, etc.)
+        yield from _handle_fp_noop(ast_node, sym_table, current_scope)
+
+
+### SECOND PASS HANDLERS (Usage Validation) ###
+
+
+## Base Cases & Literals ##
+# covers following AST nodes:
+#   - Literal
+
+
+def _handle_sp_literal(
+    ast_node: Literal, sym_table: SymbolTable, line: int, current_scope: str
+) -> Generator[SecondPassReport, None, None]:
+    """Handler for literals - no variable usage to check."""
+    yield from _yield_second_pass_report(
+        "Literal encountered; no variable usage.", node_id=ast_node.unique_id
+    )
+
+
+## Variable & Identifier Resolution ##
+# covers following AST nodes:
+#   - Variable
+#   - PropertyAccess
+#   - FunctionCall
+
+
+def _handle_sp_variable(
+    ast_node: Variable, sym_table: SymbolTable, line: int, current_scope: str
+) -> Generator[SecondPassReport, None, None]:
+    """Handler for variable usage - verify declared before use."""
+    var_name = ast_node.name
+    sym = sym_table.lookup(var_name, line, context_scope=current_scope)
+
+    if not sym:
+        yield from _yield_second_pass_report(
+            f"Variable usage of '{var_name}'.",
+            node_id=ast_node.unique_id,
+            error=SemanticError(
+                f"Line {line}: Semantic error: no variable '{var_name}' in current scope '{current_scope}'."
+            ),
+        )
+        return
+
+    # Annotate before yielding report (early annotation for UI/diagnostics)
+    _annotate_symbol_use(ast_node, sym)
+
+    yield from _yield_second_pass_report(
+        f"Variable usage of '{var_name}'. Found in context scope '{sym.scope}'.",
+        node_id=ast_node.unique_id,
+        looked_at_symbol=sym,
+    )
+
+
+def _handle_sp_property_access(
+    ast_node: PropertyAccess, sym_table: SymbolTable, line: int, current_scope: str
+) -> Generator[SecondPassReport, None, None]:
+    """Handler for property access (e.g., myType.field)."""
+    # Process the base variable/expression first
+    yield from get_second_pass_reporter(
+        ast_node.variable, sym_table, ast_node.line, current_scope
+    )
+
+    # Determine base type
+    base_type = _get_base_type(ast_node.variable)
+    if not base_type:
+        yield from _yield_second_pass_report(
+            "Property access analysis.",
+            node_id=ast_node.unique_id,
+            error=SemanticError(
+                f"Line {ast_node.line}: Semantic error: could not determine type of base expression in property access."
+            ),
+        )
+        return
+
+    composite_sym = sym_table.lookup(
+        base_type, ast_node.line, context_scope=current_scope
+    )
+    if not composite_sym:
+        yield from _yield_second_pass_report(
+            "Property access analysis.",
+            node_id=ast_node.unique_id,
+            error=SemanticError(
+                f"Line {ast_node.line}: Semantic error: composite type '{base_type}' not declared before use."
+            ),
+        )
+        return
+
+    property_name = ast_node.property.name
+    property_sym = sym_table.lookup_local(property_name, ast_node.line, scope=base_type)
+    if not property_sym:
+        yield from _yield_second_pass_report(
+            "Property access analysis.",
+            node_id=ast_node.unique_id,
+            error=SemanticError(
+                f"Line {ast_node.line}: Semantic error: property '{property_name}' not found in composite type '{base_type}'."
+            ),
+        )
+        return
+
+    # Annotate before yielding report (early annotation for UI/diagnostics)
+    if isinstance(ast_node.property, Variable):
+        _annotate_symbol_use(ast_node.property, property_sym)
+    _annotate_node_type(ast_node, property_sym.data_type)
+
+    yield from _yield_second_pass_report(
+        f"Property '{property_name}' found in composite type '{base_type}'.",
+        node_id=ast_node.unique_id,
+        looked_at_symbol=property_sym,
+    )
+
+
+def _handle_sp_function_call(
+    ast_node: FunctionCall, sym_table: SymbolTable, line: int, current_scope: str
+) -> Generator[SecondPassReport, None, None]:
+    """Handler for function calls - verify declaration and argument count."""
+    func_name = ast_node.name
+    sym = sym_table.lookup(func_name, line, context_scope=current_scope)
+
+    if not sym:
+        yield from _yield_second_pass_report(
+            f"Function call to '{func_name}'.",
+            node_id=ast_node.unique_id,
+            error=SemanticError(
+                f"Line {line}: Semantic error: no function '{func_name}' in scope '{current_scope}'."
+            ),
+        )
+        return
+
+    # Annotate before yielding report (early annotation for UI/diagnostics)
+    ast_node.resolved_symbol = sym
+    ast_node.resolved_scope = sym.scope
+    if sym.return_type:
+        _annotate_node_type(ast_node, sym.return_type)
+
+    yield from _yield_second_pass_report(
+        f"Function call to '{func_name}'. Found in context scope '{sym.scope}'.",
+        node_id=ast_node.unique_id,
+        looked_at_symbol=sym,
+    )
+
+    param_count = len(sym.parameters) if sym.parameters else 0
+    arg_count = len(ast_node.arguments)
+    if param_count != arg_count:
+        yield from _yield_second_pass_report(
+            f"Function call to '{func_name}'.",
+            node_id=ast_node.unique_id,
+            error=SemanticError(
+                f"Line {line}: Semantic error: function '{func_name}' called with {arg_count} arguments, but declared with {param_count} parameters."
+            ),
+        )
+        return
+
+    yield from _yield_second_pass_report(
+        f"Function call to '{func_name}' has correct number of arguments ({arg_count}).",
+        node_id=ast_node.unique_id,
+    )
+
+    for arg in ast_node.arguments:
+        yield from get_second_pass_reporter(arg, sym_table, line, current_scope)
+
+
+## Expression Handlers ##
+# covers following AST nodes:
+#   - Condition
+#   - UnaryExpression
+#   - BinaryExpression
+
+
+def _handle_sp_condition(
+    ast_node: Condition, sym_table: SymbolTable, line: int, current_scope: str
+) -> Generator[SecondPassReport, None, None]:
+    """Handler for condition nodes - unwrap and process expression."""
+    yield from get_second_pass_reporter(
+        ast_node.expression, sym_table, ast_node.line, current_scope
+    )
+
+
+def _handle_sp_unary_expression(
+    ast_node: UnaryExpression, sym_table: SymbolTable, line: int, current_scope: str
+) -> Generator[SecondPassReport, None, None]:
+    """Handler for unary expressions - process operand."""
+    yield from get_second_pass_reporter(
+        ast_node.operand, sym_table, ast_node.line, current_scope
+    )
+
+
+def _handle_sp_binary_expression(
+    ast_node: BinaryExpression, sym_table: SymbolTable, line: int, current_scope: str
+) -> Generator[SecondPassReport, None, None]:
+    """Handler for binary expressions - process both operands."""
+    yield from get_second_pass_reporter(
+        ast_node.left, sym_table, ast_node.line, current_scope
+    )
+    yield from get_second_pass_reporter(
+        ast_node.right, sym_table, ast_node.line, current_scope
+    )
+
+
+## Control Flow Handlers ##
+# covers following AST nodes:
+#   - IfStatement
+#   - ForStatement
+#   - WhileStatement
+#   - PostWhileStatement
+#   - CaseStatement
+
+
+def _handle_sp_if_statement(
+    ast_node: IfStatement, sym_table: SymbolTable, line: int, current_scope: str
+) -> Generator[SecondPassReport, None, None]:
+    """Handler for IF statements - process condition and both branches."""
+    yield from get_second_pass_reporter(
+        ast_node.condition, sym_table, ast_node.line, current_scope
+    )
+    yield from get_second_pass_reporter(
+        ast_node.then_branch, sym_table, ast_node.line, current_scope
+    )
+    if ast_node.else_branch:
+        yield from get_second_pass_reporter(
+            ast_node.else_branch, sym_table, ast_node.line, current_scope
+        )
+
+
+def _handle_sp_for_statement(
+    ast_node: ForStatement, sym_table: SymbolTable, line: int, current_scope: str
+) -> Generator[SecondPassReport, None, None]:
+    """Handler for FOR statements - process loop variable, bounds, and body."""
+    yield from get_second_pass_reporter(
+        ast_node.loop_variable, sym_table, ast_node.line, current_scope
+    )
+    yield from get_second_pass_reporter(
+        ast_node.bounds.lower_bound, sym_table, ast_node.line, current_scope
+    )
+    yield from get_second_pass_reporter(
+        ast_node.bounds.upper_bound, sym_table, ast_node.line, current_scope
+    )
+    yield from get_second_pass_reporter(
+        ast_node.body, sym_table, ast_node.line, current_scope
+    )
+
+
+def _handle_sp_while_statement(
+    ast_node: WhileStatement, sym_table: SymbolTable, line: int, current_scope: str
+) -> Generator[SecondPassReport, None, None]:
+    """Handler for WHILE statements - process condition and body."""
+    yield from get_second_pass_reporter(
+        ast_node.condition, sym_table, ast_node.line, current_scope
+    )
+    yield from get_second_pass_reporter(
+        ast_node.body, sym_table, ast_node.line, current_scope
+    )
+
+
+def _handle_sp_post_while_statement(
+    ast_node: PostWhileStatement, sym_table: SymbolTable, line: int, current_scope: str
+) -> Generator[SecondPassReport, None, None]:
+    """Handler for REPEAT...UNTIL statements - process body then condition."""
+    yield from get_second_pass_reporter(
+        ast_node.body, sym_table, ast_node.line, current_scope
+    )
+    yield from get_second_pass_reporter(
+        ast_node.condition, sym_table, ast_node.line, current_scope
+    )
+
+
+def _handle_sp_case_statement(
+    ast_node: CaseStatement, sym_table: SymbolTable, line: int, current_scope: str
+) -> Generator[SecondPassReport, None, None]:
+    """Handler for CASE statements - process case variable and all bodies."""
+    yield from get_second_pass_reporter(
+        ast_node.variable, sym_table, ast_node.line, current_scope
+    )
+    for case_body in ast_node.cases.values():
+        yield from get_second_pass_reporter(
+            case_body, sym_table, ast_node.line, current_scope
+        )
+
+
+## I/O Statement Handlers ##
+# covers following AST nodes:
+#   - InputStatement
+#   - OutputStatement
+#   - ReturnStatement
+
+
+def _handle_sp_input_statement(
+    ast_node: InputStatement, sym_table: SymbolTable, line: int, current_scope: str
+) -> Generator[SecondPassReport, None, None]:
+    """Handler for INPUT statements - process target variable."""
+    yield from get_second_pass_reporter(
+        ast_node.variable, sym_table, ast_node.line, current_scope
+    )
+
+
+def _handle_sp_output_statement(
+    ast_node: OutputStatement, sym_table: SymbolTable, line: int, current_scope: str
+) -> Generator[SecondPassReport, None, None]:
+    """Handler for OUTPUT statements - process all expressions."""
+    for expr in ast_node.expressions:
+        yield from get_second_pass_reporter(
+            expr, sym_table, ast_node.line, current_scope
+        )
+
+
+def _handle_sp_return_statement(
+    ast_node: ReturnStatement, sym_table: SymbolTable, line: int, current_scope: str
+) -> Generator[SecondPassReport, None, None]:
+    """Handler for RETURN statements - process return expression."""
+    yield from get_second_pass_reporter(
+        ast_node.expression, sym_table, ast_node.line, current_scope
+    )
+
+
+## Function Definition Handler ##
+# covers following AST nodes:
+#   - FunctionDefinition
+
+
+def _handle_sp_function_definition(
+    ast_node: FunctionDefinition, sym_table: SymbolTable, line: int, current_scope: str
+) -> Generator[SecondPassReport, None, None]:
+    """Handler for FUNCTION/PROCEDURE definitions - process body and return type."""
+    yield from get_second_pass_reporter(
+        ast_node.body, sym_table, ast_node.line, ast_node.name
+    )
+    yield from get_second_pass_reporter(
+        ast_node.return_type, sym_table, ast_node.line, ast_node.name
+    )
+
+
+## Declaration Validation Handlers ##
+# covers following AST nodes:
+#   - OneArrayAccess
+#   - TwoArrayAccess
+#   - VariableDeclaration
+#   - OneArrayDeclaration / TwoArrayDeclaration (via _handle_sp_array_declaration)
+#   - ReturnType
+#   - CompositeDataType
+
+
+def _handle_sp_one_array_access(
+    ast_node: OneArrayAccess, sym_table: SymbolTable, line: int, current_scope: str
+) -> Generator[SecondPassReport, None, None]:
+    """Handler for 1D array access - process array and index."""
+    yield from get_second_pass_reporter(
+        ast_node.array, sym_table, ast_node.line, current_scope
+    )
+    yield from get_second_pass_reporter(
+        ast_node.index, sym_table, ast_node.line, current_scope
+    )
+    # Annotate with element type if array variable
+    if isinstance(ast_node.array, Variable):
+        sym = sym_table.lookup(
+            ast_node.array.name, ast_node.line, context_scope=current_scope
+        )
+        if sym and (
+            sym.data_type.startswith("ARRAY[") or sym.data_type.startswith("2D ARRAY[")
         ):
-            var_name = ast_node.variable.name
-            var_line = ast_node.line
-            if not isinstance(ast_node.expression, Literal):
-                report.looked_at_tree_node_id = ast_node.unique_id
-                report.error = SemanticError(
-                    f"Line {var_line}: Semantic error: constants must be assigned a literal value (use: CONSTANT {var_name} = <literal>)."
-                )
-                yield report
-                return
-            const_type = ast_node.expression.type
-            sym = Symbol(
-                var_name,
-                var_line,
-                const_type,
-                True,
-                current_scope,
-                assigned=True,
-            )
-            try:
-                sym_table.declare_symbol(sym)
-            except SemanticError as e:
-                report.error = e
-                yield report
-                return
-            # Annotate the declared constant variable node with its type and symbol
-            try:
-                ast_node.variable.type = const_type
-            except Exception:
-                pass
-            try:
-                ast_node.variable.static_type = parse_symbol_type(const_type)
-            except Exception:
-                try:
-                    ast_node.variable.static_type = parse_type_name(const_type)
-                except Exception:
-                    pass
-            ast_node.variable.resolved_symbol = sym
-            ast_node.variable.resolved_scope = current_scope
-            report.action_bar_message = (
-                f"Declaring constant '{var_name}' (constants are declared with CONSTANT and can only be assigned once)."
-            )
-            report.looked_at_tree_node_id = ast_node.unique_id
-            report.new_symbol = sym
-            yield report
-            return
-        report.action_bar_message = "Assignment/Input encountered; no declarations."
-        report.looked_at_tree_node_id = ast_node.unique_id
-        yield report
+            inner = sym.data_type.split("[", 1)[1].rsplit("]", 1)[0].strip()
+            _annotate_node_type(ast_node, inner)
 
-    # Declarations (explicit, and constants via assignments)
-    elif isinstance(ast_node, VariableDeclaration):
-        report.action_bar_message = "Processing variable declaration."
-        report.looked_at_tree_node_id = ast_node.unique_id
-        yield report
-        for var in ast_node.variables:
-            var_name = var.name
-            var_line = ast_node.line
-            report.action_bar_message = (
-                f"Declaring {'constant' if ast_node.is_constant else 'variable'} '{var_name}'."
-            )
-            report.looked_at_tree_node_id = var.unique_id
-            sym = Symbol(
-                var_name,
-                var_line,
-                ast_node.var_type,
-                ast_node.is_constant,
-                current_scope,
-                assigned=False,
-            )
-            try:
-                sym_table.declare_symbol(sym)
-            except SemanticError as e:
-                report.error = e
-                yield report
-                return
-            # Annotate the declared variable node with its type and symbol
-            try:
-                var.type = ast_node.var_type
-            except Exception:
-                pass
-            try:
-                var.static_type = parse_symbol_type(ast_node.var_type)
-            except Exception:
-                try:
-                    var.static_type = parse_type_name(ast_node.var_type)
-                except Exception:
-                    pass
-            var.resolved_symbol = sym
-            var.resolved_scope = current_scope
-            report.new_symbol = sym
-            yield report
-    elif isinstance(ast_node, OneArrayDeclaration):
-        report.action_bar_message = "Processing one-dimensional array declaration."
-        report.looked_at_tree_node_id = ast_node.unique_id
-        yield report
-        for var in ast_node.variable:
-            var_name = var.name
-            var_line = ast_node.line
-            report.action_bar_message = f"Declaring array '{var_name}'."
-            report.looked_at_tree_node_id = var.unique_id
-            sym = Symbol(
-                var_name,
-                var_line,
-                f"ARRAY[{ast_node.var_type}]",
-                getattr(ast_node, "is_constant", False),
-                current_scope,
-                assigned=False,
-            )
-            try:
-                sym_table.declare_symbol(sym)
-            except SemanticError as e:
-                report.error = e
-                yield report
-                return
-            # Annotate the declared array variable node with its array type and symbol
-            array_type = f"ARRAY[{ast_node.var_type}]"
-            try:
-                var.type = array_type
-            except Exception:
-                pass
-            try:
-                var.static_type = parse_symbol_type(array_type)
-            except Exception:
-                try:
-                    var.static_type = parse_type_name(array_type)
-                except Exception:
-                    pass
-            var.resolved_symbol = sym
-            var.resolved_scope = current_scope
-            report.new_symbol = sym
-            yield report
-    elif isinstance(ast_node, TwoArrayDeclaration):
-        report.action_bar_message = "Processing two-dimensional array declaration."
-        report.looked_at_tree_node_id = ast_node.unique_id
-        yield report
-        for var in ast_node.variable:
-            var_name = var.name
-            var_line = ast_node.line
-            report.action_bar_message = f"Declaring 2D array '{var_name}'."
-            report.looked_at_tree_node_id = var.unique_id
-            sym = Symbol(
-                var_name,
-                var_line,
-                f"2D ARRAY[{ast_node.var_type}]",
-                getattr(ast_node, "is_constant", False),
-                current_scope,
-                assigned=False,
-            )
-            try:
-                sym_table.declare_symbol(sym)
-            except SemanticError as e:
-                report.error = e
-                yield report
-                return
-            # Annotate the declared 2D array variable node with its array type and symbol
-            array_type = f"2D ARRAY[{ast_node.var_type}]"
-            try:
-                var.type = array_type
-            except Exception:
-                pass
-            try:
-                var.static_type = parse_symbol_type(array_type)
-            except Exception:
-                try:
-                    var.static_type = parse_type_name(array_type)
-                except Exception:
-                    pass
-            var.resolved_symbol = sym
-            var.resolved_scope = current_scope
-            report.new_symbol = sym
-            yield report
-    elif isinstance(ast_node, FunctionDefinition):
-        func_name = ast_node.name
-        func_line = ast_node.line
-        report.action_bar_message = f"Declaring function definition '{func_name}'."
-        report.looked_at_tree_node_id = ast_node.unique_id
 
-        # Enforce the planned CALL/function separation:
-        # - FUNCTION must declare RETURNS <type>
-        # - PROCEDURE must not declare a return type
-        if ast_node.procedure:
-            if ast_node.return_type is not None:
-                report.error = SemanticError(
-                    f"Line {func_line}: Semantic error: PROCEDURE '{func_name}' must not declare a return type."
-                )
-                yield report
-                return
-        else:
-            if ast_node.return_type is None:
-                report.error = SemanticError(
-                    f"Line {func_line}: Semantic error: FUNCTION '{func_name}' must declare a return type (use: RETURNS <type>)."
-                )
-                yield report
-                return
-        
-        params = [(param.name, param.arg_type) for param in ast_node.parameters] # type: ignore
-        sym = Symbol(
-            func_name,
-            func_line,
-            "function",
-            False,
-            current_scope,
-            parameters=params,
-            return_type=ast_node.return_type.type_name if ast_node.return_type else None,
+def _handle_sp_two_array_access(
+    ast_node: TwoArrayAccess, sym_table: SymbolTable, line: int, current_scope: str
+) -> Generator[SecondPassReport, None, None]:
+    """Handler for 2D array access - process array and both indices."""
+    yield from get_second_pass_reporter(
+        ast_node.array, sym_table, ast_node.line, current_scope
+    )
+    yield from get_second_pass_reporter(
+        ast_node.index1, sym_table, ast_node.line, current_scope
+    )
+    yield from get_second_pass_reporter(
+        ast_node.index2, sym_table, ast_node.line, current_scope
+    )
+    # Annotate with element type if array variable
+    if isinstance(ast_node.array, Variable):
+        sym = sym_table.lookup(
+            ast_node.array.name, ast_node.line, context_scope=current_scope
         )
-        try:
-            sym_table.declare_symbol(sym)
-        except SemanticError as e:
-            report.error = e
-            yield report
-            return
-        report.new_symbol = sym
-        yield report
+        if sym and (
+            sym.data_type.startswith("ARRAY[") or sym.data_type.startswith("2D ARRAY[")
+        ):
+            inner = sym.data_type.split("[", 1)[1].rsplit("]", 1)[0].strip()
+            _annotate_node_type(ast_node, inner)
 
-        # Enter function scope
-        new_scope = sym_table.enter_scope(func_name, current_scope)
-        for param in ast_node.parameters:
-            report.action_bar_message = f"Declaring function parameter '{param.name}'." # type: ignore
-            report.looked_at_tree_node_id = param.unique_id
-            param_name = param.name # type: ignore
-            param_line = ast_node.line
-            sym = Symbol(
-                param_name,
-                param_line,
-                param.arg_type,  # type: ignore
-                False,
-                new_scope,
-            )
-            try:
-                sym_table.declare_symbol(sym)
-            except SemanticError as e:
-                report.error = e
-                yield report
-                return
-            # If parameters are Variable nodes, annotate them too; otherwise skip
-            try:
-                if isinstance(param, Variable):
-                    param.type = param.arg_type  # type: ignore
-                    try:
-                        param.static_type = parse_symbol_type(param.arg_type)  # type: ignore
-                    except Exception:
-                        try:
-                            param.static_type = parse_type_name(param.arg_type)  # type: ignore
-                        except Exception:
-                            pass
-                    param.resolved_symbol = sym
-                    param.resolved_scope = new_scope
-            except Exception:
-                pass
-            report.new_symbol = sym
-            yield report
-        yield from get_first_pass_reporter(ast_node.body, sym_table, current_scope=new_scope)
 
-    elif isinstance(ast_node, CompositeDataType):
-        report.action_bar_message = f"Declaring composite data type '{ast_node.name}'."
-        report.looked_at_tree_node_id = ast_node.unique_id
-        type_name = ast_node.name
-        type_line = ast_node.line
-        sym = Symbol(
-            type_name,
-            type_line,
-            "composite",
-            False,
-            current_scope,
-            parameters=[(field.name, field.type) for field in ast_node.fields],
+def _handle_sp_variable_declaration(
+    ast_node: VariableDeclaration, sym_table: SymbolTable, line: int, current_scope: str
+) -> Generator[SecondPassReport, None, None]:
+    """Handler for variable declarations - verify custom types exist."""
+    if _is_built_in_type(ast_node.var_type):
+        yield from _yield_second_pass_report(
+            f"Assignment has built-in data type '{ast_node.var_type}'.",
+            node_id=ast_node.unique_id,
+            looked_at_symbol=None,
         )
-        try:
-            sym_table.declare_symbol(sym)
-        except SemanticError as e:
-            report.error = e
-            yield report
-            return
-        report.new_symbol = sym
-        yield report
+        return
 
-        # Enter composite type scope
-        new_scope = sym_table.enter_scope(type_name, current_scope)
-        for variable in ast_node.fields:
-            report.action_bar_message = f"Declaring composite type field '{variable.name}'."
-            report.looked_at_tree_node_id = variable.unique_id
-            field_name = variable.name
-            field_line = ast_node.line
-            sym = Symbol(
-                field_name,
-                field_line,
-                variable.type,
-                False,
-                new_scope,
+    sym = sym_table.lookup(
+        ast_node.var_type, ast_node.line, context_scope=current_scope
+    )
+    if not sym:
+        yield from _yield_second_pass_report(
+            f"Variable declaration of type '{ast_node.var_type}'.",
+            node_id=ast_node.unique_id,
+            error=SemanticError(
+                f"Line {ast_node.line}: Semantic error: data type '{ast_node.var_type}' not declared before use."
+            ),
+        )
+        return
+
+    yield from _yield_second_pass_report(
+        f"Variable declaration of type '{ast_node.var_type}' verified.",
+        node_id=ast_node.unique_id,
+        looked_at_symbol=sym,
+    )
+
+
+def _handle_sp_array_declaration(
+    ast_node, sym_table: SymbolTable, line: int, current_scope: str
+) -> Generator[SecondPassReport, None, None]:
+    """Handler for array declarations - verify custom element types exist."""
+    if _is_built_in_type(ast_node.var_type):
+        yield from _yield_second_pass_report(
+            f"Assignment has built-in data type '{ast_node.var_type}'.",
+            node_id=ast_node.unique_id,
+            looked_at_symbol=None,
+        )
+        return
+
+    sym = sym_table.lookup(
+        ast_node.var_type, ast_node.line, context_scope=current_scope
+    )
+    if not sym:
+        yield from _yield_second_pass_report(
+            f"Array declaration of type '{ast_node.var_type}'.",
+            node_id=ast_node.unique_id,
+            error=SemanticError(
+                f"Line {ast_node.line}: Semantic error: data type '{ast_node.var_type}' not declared before use."
+            ),
+        )
+        return
+
+    yield from _yield_second_pass_report(
+        f"Type '{ast_node.var_type}' or array declaration found in context scope '{sym.scope}'.",
+        node_id=ast_node.unique_id,
+        looked_at_symbol=sym,
+    )
+
+
+def _handle_sp_return_type(
+    ast_node: ReturnType, sym_table: SymbolTable, line: int, current_scope: str
+) -> Generator[SecondPassReport, None, None]:
+    """Handler for return type declarations - verify custom types exist."""
+    if _is_built_in_type(ast_node.type_name):
+        yield from _yield_second_pass_report(
+            f"Return type has built-in data type '{ast_node.type_name}'.",
+            node_id=ast_node.unique_id,
+            looked_at_symbol=None,
+        )
+        return
+
+    sym = sym_table.lookup(
+        ast_node.type_name, ast_node.line, context_scope=current_scope
+    )
+    if not sym:
+        yield from _yield_second_pass_report(
+            f"Return type '{ast_node.type_name}'.",
+            node_id=ast_node.unique_id,
+            error=SemanticError(
+                f"Line {ast_node.line}: Semantic error: return type '{ast_node.type_name}' not declared before use."
+            ),
+        )
+        return
+
+    yield from _yield_second_pass_report(
+        f"Return type '{ast_node.type_name}' found in context scope '{sym.scope}'.",
+        node_id=ast_node.unique_id,
+        looked_at_symbol=sym,
+    )
+
+
+def _handle_sp_composite_data_type(
+    ast_node: CompositeDataType, sym_table: SymbolTable, line: int, current_scope: str
+) -> Generator[SecondPassReport, None, None]:
+    """Handler for composite type definitions - verify field types exist."""
+    yield from _yield_second_pass_report(
+        f"Composite data type '{ast_node.name}' declaration; must check that field types are known.",
+        node_id=ast_node.unique_id,
+        looked_at_symbol=None,
+    )
+
+    for field in ast_node.fields:
+        if _is_built_in_type(field.type):
+            yield from _yield_second_pass_report(
+                f"Field '{field.name}' of composite type '{ast_node.name}' has built-in data type '{field.type}'.",
+                node_id=field.unique_id,
+                looked_at_symbol=None,
             )
-            try:
-                sym_table.declare_symbol(sym)
-            except SemanticError as e:
-                report.error = e
-                yield report
-                return
-            # Annotate the field Variable node with its type and symbol
-            try:
-                variable.static_type = parse_symbol_type(variable.type)
-            except Exception:
-                try:
-                    variable.static_type = parse_type_name(variable.type)
-                except Exception:
-                    pass
-            variable.resolved_symbol = sym
-            variable.resolved_scope = new_scope
-            report.new_symbol = sym
-            yield report
+            continue
 
-    # Recursive cases
-    elif isinstance(ast_node, Statements):
-        for stmt in ast_node.statements:
-            yield from get_first_pass_reporter(stmt, sym_table, current_scope)
-    elif isinstance(ast_node, IfStatement):
-        report.action_bar_message = "Processing IF statement. Skipping condition for first pass."
-        report.looked_at_tree_node_id = ast_node.unique_id
-        yield report
-        yield from get_first_pass_reporter(ast_node.then_branch, sym_table, current_scope)
-        if ast_node.else_branch:
-            yield from get_first_pass_reporter(ast_node.else_branch, sym_table, current_scope)
-    elif isinstance(ast_node, ForStatement):
-        yield from get_first_pass_reporter(ast_node.body, sym_table, current_scope)
-    elif isinstance(ast_node, WhileStatement) or isinstance(
-        ast_node, PostWhileStatement
-    ):
-        if isinstance(ast_node, WhileStatement):
-            report.action_bar_message = "Processing WHILE statement. Skipping condition for first pass."
-            report.looked_at_tree_node_id = ast_node.unique_id
-            yield report
-        yield from get_first_pass_reporter(ast_node.body, sym_table, current_scope)
-        if isinstance(ast_node, PostWhileStatement):
-            report.action_bar_message = "Processing POST-WHILE statement. Skipping condition for first pass."
-            report.looked_at_tree_node_id = ast_node.unique_id
-            yield report
-    elif isinstance(ast_node, CaseStatement):
-        report.action_bar_message = "Processing CASE statement. Skipping case variable for first pass."
-        report.looked_at_tree_node_id = ast_node.unique_id
-        yield report
-        for case_body in ast_node.cases.values():
-            yield from get_first_pass_reporter(case_body, sym_table, current_scope)
+        sym = sym_table.lookup(field.type, ast_node.line, context_scope=current_scope)
+        if not sym:
+            yield from _yield_second_pass_report(
+                f"Field '{field.name}' of composite type '{ast_node.name}'.",
+                node_id=field.unique_id,
+                error=SemanticError(
+                    f"Line {ast_node.line}: Semantic error: data type '{field.type}' not found in scope '{current_scope}'."
+                ),
+            )
+            return
+
+        yield from _yield_second_pass_report(
+            f"Type '{field.type}' for field '{field.name}' of composite type '{ast_node.name}' found in context scope '{sym.scope}'.",
+            node_id=field.unique_id,
+            looked_at_symbol=sym,
+        )
 
 
-def get_second_pass_reporter(ast_node, sym_table: SymbolTable, line: int, current_scope="global") -> Generator[SecondPassReport, None, None]:
+## Built-In Method Handlers ##
+# covers following AST nodes:
+#   - RightStringMethod
+#   - LengthStringMethod
+#   - MidStringMethod
+#   - LowerStringMethod
+#   - UpperStringMethod
+#   - IntCastMethod
+#   - RandomRealMethod
+#   - EOFStatement
+
+
+def _handle_sp_right_string(
+    ast_node: RightStringMethod, sym_table: SymbolTable, line: int, current_scope: str
+) -> Generator[SecondPassReport, None, None]:
+    """Handler for RIGHT() string method."""
+    yield from get_second_pass_reporter(
+        ast_node.string_expr, sym_table, ast_node.line, current_scope
+    )
+    yield from get_second_pass_reporter(
+        ast_node.count_expr, sym_table, ast_node.line, current_scope
+    )
+
+
+def _handle_sp_length_string(
+    ast_node: LengthStringMethod, sym_table: SymbolTable, line: int, current_scope: str
+) -> Generator[SecondPassReport, None, None]:
+    """Handler for LENGTH() string method."""
+    yield from get_second_pass_reporter(
+        ast_node.string_expr, sym_table, ast_node.line, current_scope
+    )
+
+
+def _handle_sp_mid_string(
+    ast_node: MidStringMethod, sym_table: SymbolTable, line: int, current_scope: str
+) -> Generator[SecondPassReport, None, None]:
+    """Handler for MID() string method."""
+    yield from get_second_pass_reporter(
+        ast_node.string_expr, sym_table, ast_node.line, current_scope
+    )
+    yield from get_second_pass_reporter(
+        ast_node.start_expr, sym_table, ast_node.line, current_scope
+    )
+    yield from get_second_pass_reporter(
+        ast_node.length_expr, sym_table, ast_node.line, current_scope
+    )
+
+
+def _handle_sp_lower_string(
+    ast_node: LowerStringMethod, sym_table: SymbolTable, line: int, current_scope: str
+) -> Generator[SecondPassReport, None, None]:
+    """Handler for LCASE() string method."""
+    yield from get_second_pass_reporter(
+        ast_node.string_expr, sym_table, ast_node.line, current_scope
+    )
+
+
+def _handle_sp_upper_string(
+    ast_node: UpperStringMethod, sym_table: SymbolTable, line: int, current_scope: str
+) -> Generator[SecondPassReport, None, None]:
+    """Handler for UCASE() string method."""
+    yield from get_second_pass_reporter(
+        ast_node.string_expr, sym_table, ast_node.line, current_scope
+    )
+
+
+def _handle_sp_int_cast(
+    ast_node: IntCastMethod, sym_table: SymbolTable, line: int, current_scope: str
+) -> Generator[SecondPassReport, None, None]:
+    """Handler for INT() cast method."""
+    yield from get_second_pass_reporter(
+        ast_node.expr, sym_table, ast_node.line, current_scope
+    )
+
+
+def _handle_sp_random_real(
+    ast_node: RandomRealMethod, sym_table: SymbolTable, line: int, current_scope: str
+) -> Generator[SecondPassReport, None, None]:
+    """Handler for RAND() method."""
+    yield from get_second_pass_reporter(
+        ast_node.high_expr, sym_table, ast_node.line, current_scope
+    )
+
+
+def _handle_sp_eof(
+    ast_node: EOFStatement, sym_table: SymbolTable, line: int, current_scope: str
+) -> Generator[SecondPassReport, None, None]:
+    """Handler for EOF() file check."""
+    yield from get_second_pass_reporter(
+        ast_node.filename, sym_table, ast_node.line, current_scope
+    )
+
+
+## File Operation Handlers ##
+# covers following AST nodes:
+#   - OpenFileStatement
+#   - CloseFileStatement
+#   - ReadFileStatement
+#   - WriteFileStatement
+
+
+def _handle_sp_open_file(
+    ast_node: OpenFileStatement, sym_table: SymbolTable, line: int, current_scope: str
+) -> Generator[SecondPassReport, None, None]:
+    """Handler for OPENFILE statement."""
+    yield from get_second_pass_reporter(
+        ast_node.filename, sym_table, ast_node.line, current_scope
+    )
+
+
+def _handle_sp_close_file(
+    ast_node: CloseFileStatement, sym_table: SymbolTable, line: int, current_scope: str
+) -> Generator[SecondPassReport, None, None]:
+    """Handler for CLOSEFILE statement."""
+    yield from get_second_pass_reporter(
+        ast_node.filename, sym_table, ast_node.line, current_scope
+    )
+
+
+def _handle_sp_read_file(
+    ast_node: ReadFileStatement, sym_table: SymbolTable, line: int, current_scope: str
+) -> Generator[SecondPassReport, None, None]:
+    """Handler for READFILE statement."""
+    yield from get_second_pass_reporter(
+        ast_node.filename, sym_table, ast_node.line, current_scope
+    )
+    yield from get_second_pass_reporter(
+        ast_node.variable, sym_table, ast_node.line, current_scope
+    )
+
+
+def _handle_sp_write_file(
+    ast_node: WriteFileStatement, sym_table: SymbolTable, line: int, current_scope: str
+) -> Generator[SecondPassReport, None, None]:
+    """Handler for WRITEFILE statement."""
+    yield from get_second_pass_reporter(
+        ast_node.filename, sym_table, ast_node.line, current_scope
+    )
+    yield from get_second_pass_reporter(
+        ast_node.expression, sym_table, ast_node.line, current_scope
+    )
+
+
+## Statement Collection Handler ##
+# covers following AST nodes:
+#   - Statements
+
+
+def _handle_sp_statements(
+    ast_node: Statements, sym_table: SymbolTable, line: int, current_scope: str
+) -> Generator[SecondPassReport, None, None]:
+    """Handler for statement blocks - process each statement."""
+    for stmt in ast_node.statements:
+        yield from get_second_pass_reporter(stmt, sym_table, stmt.line, current_scope)
+
+
+## Assignment Statement Handler ##
+# covers following AST nodes:
+#   - AssignmentStatement (complex handler with property access, array access, constant validation)
+
+
+def _process_assignment_array_indices(
+    variable, sym_table: SymbolTable, line: int, current_scope: str
+) -> Generator[SecondPassReport, None, None]:
+    """Process array indices on assignment LHS (e.g., nums[i] <- value)."""
+    if isinstance(variable, OneArrayAccess):
+        yield from get_second_pass_reporter(
+            variable.index, sym_table, line, current_scope
+        )
+    elif isinstance(variable, TwoArrayAccess):
+        yield from get_second_pass_reporter(
+            variable.index1, sym_table, line, current_scope
+        )
+        yield from get_second_pass_reporter(
+            variable.index2, sym_table, line, current_scope
+        )
+
+
+def _process_assignment_property_access_impl(
+    ast_node: AssignmentStatement, sym_table: SymbolTable, current_scope: str
+) -> Generator[SecondPassReport, None, None]:
+    """Inner generator for property access handling on assignment LHS."""
+
+    # Process the base variable/expression in the property access
+    yield from get_second_pass_reporter(
+        ast_node.variable.variable, sym_table, ast_node.line, current_scope
+    )
+
+    # Determine base type from the processed base expression
+    base_type = _get_base_type(ast_node.variable.variable)
+
+    report = SecondPassReport()
+    report.looked_at_tree_node_id = (
+        ast_node.variable.property.unique_id
+        if getattr(ast_node.variable, "property", None)
+        else ast_node.unique_id
+    )
+
+    if not base_type:
+        yield from _yield_second_pass_report(
+            "Could not determine base type.",
+            node_id=report.looked_at_tree_node_id,
+            error=SemanticError(
+                f"Line {ast_node.line}: Semantic error: could not determine type of base expression in property access."
+            ),
+        )
+        return
+
+    # Look up composite type
+    composite_sym = sym_table.lookup(
+        base_type, ast_node.line, context_scope=current_scope
+    )
+    if not composite_sym:
+        yield from _yield_second_pass_report(
+            f"Composite type '{base_type}' not found.",
+            node_id=report.looked_at_tree_node_id,
+            error=SemanticError(
+                f"Line {ast_node.line}: Semantic error: composite type '{base_type}' not declared before use."
+            ),
+        )
+        return
+
+    # Look up property in composite type
+    property_name = ast_node.variable.property.name
+    property_sym = sym_table.lookup_local(property_name, ast_node.line, scope=base_type)
+    if not property_sym:
+        yield from _yield_second_pass_report(
+            f"Property '{property_name}' not found.",
+            node_id=report.looked_at_tree_node_id,
+            error=SemanticError(
+                f"Line {ast_node.line}: Semantic error: property '{property_name}' not found in composite type '{base_type}'."
+            ),
+        )
+        return
+
+    # Annotate and report success
+    if isinstance(ast_node.variable.property, Variable):
+        _annotate_symbol_use(ast_node.variable.property, property_sym)
+    _annotate_node_type(ast_node.variable, property_sym.data_type)
+
+    yield from _yield_second_pass_report(
+        f"Property '{property_name}' found in composite type '{base_type}'.",
+        node_id=report.looked_at_tree_node_id,
+        looked_at_symbol=property_sym,
+    )
+
+    # Process RHS expression after LHS property access checks are complete
+    yield from get_second_pass_reporter(
+        ast_node.expression, sym_table, ast_node.line, current_scope
+    )
+
+
+def _process_assignment_property_access_check(
+    ast_node: AssignmentStatement, sym_table: SymbolTable, current_scope: str
+) -> Generator[SecondPassReport, None, None] | None:
+    """Check if assignment LHS is property access and return generator if so.
+
+    Returns:
+        Generator if property access was handled, None if not a property access
+    """
+    if not isinstance(ast_node.variable, PropertyAccess):
+        return None
+
+    return _process_assignment_property_access_impl(ast_node, sym_table, current_scope)
+
+
+def _identify_assignment_lhs(
+    variable, line: int
+) -> tuple[str, ASTNodeId | None] | tuple[None, None]:
+    """Identify the LHS variable name and focus node ID for assignment.
+
+    Returns:
+        (name, focus_node_id) tuple, or (None, None) on error
+    """
+    if isinstance(variable, Variable):
+        return variable.name, variable.unique_id
+    elif isinstance(variable, OneArrayAccess):
+        if not isinstance(variable.array, Variable):
+            return None, None
+        return variable.array.name, variable.array.unique_id
+    elif isinstance(variable, TwoArrayAccess):
+        if not isinstance(variable.array, Variable):
+            return None, None
+        return variable.array.name, variable.array.unique_id
+    return None, None
+
+
+def _annotate_assignment_lhs(variable, sym: Symbol) -> None:
+    """Annotate assignment LHS with type information."""
+    if isinstance(variable, Variable):
+        _annotate_symbol_use(variable, sym)
+        _annotate_node_type(variable, sym.data_type)
+    elif isinstance(variable, OneArrayAccess) and isinstance(variable.array, Variable):
+        _annotate_symbol_use(variable.array, sym)
+        # Annotate array element access with element type
+        if sym.data_type.startswith("ARRAY[") or sym.data_type.startswith("2D ARRAY["):
+            inner = sym.data_type.split("[", 1)[1].rsplit("]", 1)[0].strip()
+            _annotate_node_type(variable, inner)
+    elif isinstance(variable, TwoArrayAccess) and isinstance(variable.array, Variable):
+        _annotate_symbol_use(variable.array, sym)
+        # Annotate array element access with element type
+        if sym.data_type.startswith("ARRAY[") or sym.data_type.startswith("2D ARRAY["):
+            inner = sym.data_type.split("[", 1)[1].rsplit("]", 1)[0].strip()
+            _annotate_node_type(variable, inner)
+
+
+def _validate_and_process_constant_assignment(
+    ast_node: AssignmentStatement,
+    sym: Symbol,
+    name_check: str,
+    focus_node_id: ASTNodeId | None,
+    sym_table: SymbolTable,
+    current_scope: str,
+) -> Generator[SecondPassReport, None, None]:
+    """Validate constant assignment rules and process if valid.
+
+    Handles both CONSTANT declarations and assignments to already-declared constants.
+    Yields error reports for violations, success reports for valid assignments.
+    Always processes RHS expression for completeness.
+
+    Returns:
+        Generator yielding reports. Caller should return after consuming this generator.
+    """
+    is_const_decl = bool(getattr(ast_node, "is_constant_declaration", False))
+
+    # Case 1: Regular assignment to already-declared constant
+    if not is_const_decl:
+        # Check if constant was already assigned
+        if sym.assigned:
+            yield from _yield_second_pass_report(
+                f"Cannot reassign constant '{name_check}'.",
+                node_id=focus_node_id,
+                looked_at_symbol=sym,
+                error=SemanticError(
+                    f"Line {ast_node.line}: Semantic error: cannot assign to constant '{name_check}' (constants can only be assigned once)."
+                ),
+            )
+            yield from get_second_pass_reporter(
+                ast_node.expression, sym_table, ast_node.line, current_scope
+            )
+            return
+
+        # Check if RHS is a literal
+        if not isinstance(ast_node.expression, Literal):
+            yield from _yield_second_pass_report(
+                f"Constant '{name_check}' must be assigned a literal.",
+                node_id=focus_node_id,
+                looked_at_symbol=sym,
+                error=SemanticError(
+                    f"Line {ast_node.line}: Semantic error: constants must be assigned a literal value."
+                ),
+            )
+            yield from get_second_pass_reporter(
+                ast_node.expression, sym_table, ast_node.line, current_scope
+            )
+            return
+
+        # Valid: First initialization of constant with literal
+        sym.assigned = True
+        yield from _yield_second_pass_report(
+            f"Initialized constant '{name_check}' with a literal value.",
+            node_id=focus_node_id,
+            looked_at_symbol=sym,
+        )
+        yield from get_second_pass_reporter(
+            ast_node.expression, sym_table, ast_node.line, current_scope
+        )
+        return
+
+    # Case 2: CONSTANT declaration with assignment
+    if not isinstance(ast_node.expression, Literal):
+        yield from _yield_second_pass_report(
+            f"Constant '{name_check}' must be assigned a literal.",
+            node_id=focus_node_id,
+            looked_at_symbol=sym,
+            error=SemanticError(
+                f"Line {ast_node.line}: Semantic error: constants must be assigned a literal value."
+            ),
+        )
+        yield from get_second_pass_reporter(
+            ast_node.expression, sym_table, ast_node.line, current_scope
+        )
+        return
+
+    # Valid: CONSTANT declaration with literal - mark as assigned and continue to normal flow
+    sym.assigned = True
+
+
+def _handle_sp_assignment(
+    ast_node: AssignmentStatement, sym_table: SymbolTable, line: int, current_scope: str
+) -> Generator[SecondPassReport, None, None]:
+    """Handler for assignment statements - validates LHS, enforces constant rules, processes RHS."""
+    # Process array indices on LHS if present
+    yield from _process_assignment_array_indices(
+        ast_node.variable, sym_table, ast_node.line, current_scope
+    )
+
+    # Handle property access on LHS (returns generator if handled, None otherwise)
+    property_result = _process_assignment_property_access_check(
+        ast_node, sym_table, current_scope
+    )
+    if property_result is not None:
+        yield from property_result
+        return  # Property access handled completely
+
+    # Identify LHS variable
+    name_check, focus_node_id = _identify_assignment_lhs(
+        ast_node.variable, ast_node.line
+    )
+    if name_check is None:
+        yield from _yield_second_pass_report(
+            "Invalid assignment target.",
+            node_id=ast_node.unique_id,
+            error=SemanticError(
+                f"Line {ast_node.line}: Semantic error: assignment to array element must target a declared array identifier."
+            ),
+        )
+        return
+
+    # Look up LHS variable in symbol table
+    sym = sym_table.lookup(name_check, ast_node.line, context_scope=current_scope)
+    if not sym:
+        yield from _yield_second_pass_report(
+            f"Variable '{name_check}' not declared.",
+            node_id=focus_node_id,
+            error=SemanticError(
+                f"Line {ast_node.line}: Semantic error: variable '{name_check}' not declared before use."
+            ),
+        )
+        return
+
+    # Annotate LHS with type information
+    _annotate_assignment_lhs(ast_node.variable, sym)
+
+    # Validate constant assignment rules (handles all constant logic + RHS processing)
+    if sym.constant:
+        yield from _validate_and_process_constant_assignment(
+            ast_node, sym, name_check, focus_node_id, sym_table, current_scope
+        )
+        return
+
+    # Regular (non-constant) assignment: report success and process RHS
+    yield from _yield_second_pass_report(
+        f"Assignment to variable '{name_check}'. Found in context scope '{sym.scope}'.",
+        node_id=focus_node_id,
+        looked_at_symbol=sym,
+    )
+    yield from get_second_pass_reporter(
+        ast_node.expression, sym_table, ast_node.line, current_scope
+    )
+
+
+### SECOND PASS DISPATCH TABLE ###
+
+# Maps AST node types to second-pass handlers
+SECOND_PASS_HANDLERS = {
+    Literal: _handle_sp_literal,
+    Variable: _handle_sp_variable,
+    PropertyAccess: _handle_sp_property_access,
+    FunctionCall: _handle_sp_function_call,
+    AssignmentStatement: _handle_sp_assignment,
+    Condition: _handle_sp_condition,
+    UnaryExpression: _handle_sp_unary_expression,
+    BinaryExpression: _handle_sp_binary_expression,
+    Statements: _handle_sp_statements,
+    IfStatement: _handle_sp_if_statement,
+    ForStatement: _handle_sp_for_statement,
+    WhileStatement: _handle_sp_while_statement,
+    PostWhileStatement: _handle_sp_post_while_statement,
+    CaseStatement: _handle_sp_case_statement,
+    InputStatement: _handle_sp_input_statement,
+    OutputStatement: _handle_sp_output_statement,
+    ReturnStatement: _handle_sp_return_statement,
+    FunctionDefinition: _handle_sp_function_definition,
+    OneArrayAccess: _handle_sp_one_array_access,
+    TwoArrayAccess: _handle_sp_two_array_access,
+    VariableDeclaration: _handle_sp_variable_declaration,
+    OneArrayDeclaration: _handle_sp_array_declaration,
+    TwoArrayDeclaration: _handle_sp_array_declaration,
+    ReturnType: _handle_sp_return_type,
+    CompositeDataType: _handle_sp_composite_data_type,
+    # Built-in methods
+    RightStringMethod: _handle_sp_right_string,
+    LengthStringMethod: _handle_sp_length_string,
+    MidStringMethod: _handle_sp_mid_string,
+    LowerStringMethod: _handle_sp_lower_string,
+    UpperStringMethod: _handle_sp_upper_string,
+    IntCastMethod: _handle_sp_int_cast,
+    RandomRealMethod: _handle_sp_random_real,
+    EOFStatement: _handle_sp_eof,
+    # File operations
+    OpenFileStatement: _handle_sp_open_file,
+    CloseFileStatement: _handle_sp_close_file,
+    ReadFileStatement: _handle_sp_read_file,
+    WriteFileStatement: _handle_sp_write_file,
+}
+
+
+### SECOND PASS PUBLIC API ###
+
+
+def get_second_pass_reporter(
+    ast_node, sym_table: SymbolTable, line: int, current_scope="global"
+) -> Generator[SecondPassReport, None, None]:
     """Second pass semantic analysis: variable usage, function calls, custom types.
     Checks that all have been declared before use.
 
-    Also checks for number of arguments in function calls.
+    Uses dispatch table for routing to all node types including AssignmentStatement.
     """
-    report = SecondPassReport()
 
-    def _annotate_symbol_use(var_node: Variable, sym: Symbol) -> None:
-        # Populate basic symbol/type metadata early (3.2) for pedagogy/UI.
-        # Full expression inference and validation remains the responsibility
-        # of the strong type checker phase.
-        try:
-            var_node.type = sym.data_type
-        except Exception:
-            pass
-        try:
-            var_node.static_type = parse_symbol_type(sym.data_type)
-        except Exception:
-            pass
-        var_node.resolved_symbol = sym
-        var_node.resolved_scope = sym.scope
-
-    def _annotate_node_type(node: ASTNode, type_str: str) -> None:
-        try:
-            node.static_type = parse_symbol_type(type_str)
-        except Exception:
-            try:
-                node.static_type = parse_type_name(type_str)
-            except Exception:
-                pass
-
-    # Base cases
+    # Handle None case
     if ast_node is None:
-        report.action_bar_message = "No node to process."
-        yield report
-        return
-    elif isinstance(ast_node, Literal):
-        report.action_bar_message = "Literal encountered; no variable usage."
-        report.looked_at_tree_node_id = ast_node.unique_id
-        yield report
+        yield from _yield_second_pass_report("No node to process.")
         return
 
-    # Variable usage
-    elif isinstance(ast_node, Variable):
-        var_name = ast_node.name
-
-        sym = sym_table.lookup(var_name, line, context_scope=current_scope)
-        report.looked_at_tree_node_id = ast_node.unique_id
-        if not sym:
-            report.error = SemanticError(
-                f"Line {line}: Semantic error: no variable '{var_name}' in current scope '{current_scope}'."
-            )
-            yield report
-            return
-        _annotate_symbol_use(ast_node, sym)
-        report.action_bar_message = f"Variable usage of '{var_name}'. Found in context scope '{sym.scope}'."
-        report.looked_at_symbol = sym
-        yield report
-
-    # Property access used as an expression (e.g., RHS of assignment, OUTPUT)
-    elif isinstance(ast_node, PropertyAccess):
-        # Process the base variable/expression first (yields reports for each step)
-        yield from get_second_pass_reporter(ast_node.variable, sym_table, ast_node.line, current_scope)
-        
-        # Now determine the base type to look up the property
-        def _get_base_type(expr: ASTNode) -> str | None:
-            """Extract the static_type from an already-processed expression."""
-            if hasattr(expr, 'static_type') and expr.static_type:
-                from CompilerComponents.TypeSystem import type_to_string
-                return type_to_string(expr.static_type)
-            return None
-        
-        base_type = _get_base_type(ast_node.variable)
-        report.looked_at_tree_node_id = ast_node.unique_id
-        
-        if not base_type:
-            report.error = SemanticError(
-                f"Line {ast_node.line}: Semantic error: could not determine type of base expression in property access."
-            )
-            yield report
-            return
-        
-        composite_sym = sym_table.lookup(base_type, ast_node.line, context_scope=current_scope)
-        if not composite_sym:
-            report.error = SemanticError(
-                f"Line {ast_node.line}: Semantic error: composite type '{base_type}' not declared before use."
-            )
-            yield report
-            return
-
-        property_name = ast_node.property.name
-        property_sym = sym_table.lookup_local(property_name, ast_node.line, scope=base_type)
-        if not property_sym:
-            report.error = SemanticError(
-                f"Line {ast_node.line}: Semantic error: property '{property_name}' not found in composite type '{base_type}'."
-            )
-            yield report
-            return
-
-        report.action_bar_message = (
-            f"Property '{property_name}' found in composite type '{base_type}'."
+    # Dispatch to appropriate handler
+    handler = SECOND_PASS_HANDLERS.get(type(ast_node))
+    if handler:
+        yield from handler(ast_node, sym_table, line, current_scope)
+    else:
+        # Fallback: unhandled node type
+        yield from _yield_second_pass_report(
+            f"Unhandled node type: {type(ast_node).__name__}",
+            node_id=getattr(ast_node, "unique_id", None),
         )
-        report.looked_at_symbol = property_sym
-        if isinstance(ast_node.property, Variable):
-            _annotate_symbol_use(ast_node.property, property_sym)
-        _annotate_node_type(ast_node, property_sym.data_type)
-        _annotate_node_type(ast_node, property_sym.data_type)
-        yield report
-        return
-
-    # Function calls
-    elif isinstance(ast_node, FunctionCall):
-        func_name = ast_node.name
-        report.looked_at_tree_node_id = ast_node.unique_id
-        sym = sym_table.lookup(func_name, line, context_scope=current_scope)
-        if not sym:
-            report.error = SemanticError(
-                f"Line {line}: Semantic error: function '{func_name}' not declared before use."
-            )
-            yield report
-            return
-        ast_node.resolved_symbol = sym
-        ast_node.resolved_scope = sym.scope
-        if sym.return_type:
-            _annotate_node_type(ast_node, sym.return_type)
-        report.action_bar_message = f"Function call to '{func_name}'. Found in context scope '{sym.scope}'."
-        report.looked_at_symbol = sym
-        yield report
-        param_count = len(sym.parameters) if sym.parameters else 0
-        arg_count = len(ast_node.arguments)
-        if param_count != arg_count:
-            report.error = SemanticError(
-                f"Line {line}: Semantic error: function '{func_name}' called with {arg_count} arguments, but declared with {param_count} parameters."
-            )
-            yield report
-            return
-        report.action_bar_message = f"Function call to '{func_name}' has correct number of arguments ({arg_count})."
-        yield report
-        for arg in ast_node.arguments:
-            yield from get_second_pass_reporter(arg, sym_table, line, current_scope)
-
-    # Assignments
-    elif isinstance(ast_node, AssignmentStatement):
-        # Process LHS (assignable) first, then RHS (expression)
-        
-        # Process array indices on LHS if present (for assignments like nums[i] <- value)
-        if isinstance(ast_node.variable, OneArrayAccess):
-            yield from get_second_pass_reporter(ast_node.variable.index, sym_table, ast_node.line, current_scope)
-        elif isinstance(ast_node.variable, TwoArrayAccess):
-            yield from get_second_pass_reporter(ast_node.variable.index1, sym_table, ast_node.line, current_scope)
-            yield from get_second_pass_reporter(ast_node.variable.index2, sym_table, ast_node.line, current_scope)
-        
-        name_check = ""
-        line_check = 0
-        context = current_scope
-
-        # In the 2nd pass we are resolving identifier uses; for assignments that
-        # means the LHS identifier should be the focused/highlighted node.
-        focus_node_id = ast_node.unique_id
-
-        if isinstance(ast_node.variable, PropertyAccess):
-            # Process the base variable/expression in the property access (yields reports for each step)
-            yield from get_second_pass_reporter(ast_node.variable.variable, sym_table, ast_node.line, current_scope)
-            
-            # Determine base type from the processed base expression
-            def _get_base_type(expr: ASTNode) -> str | None:
-                """Extract the static_type from an already-processed expression."""
-                if hasattr(expr, 'static_type') and expr.static_type:
-                    from CompilerComponents.TypeSystem import type_to_string
-                    return type_to_string(expr.static_type)
-                return None
-            
-            base_type = _get_base_type(ast_node.variable.variable)
-            report.looked_at_tree_node_id = ast_node.variable.property.unique_id if getattr(ast_node.variable, "property", None) else ast_node.unique_id
-            
-            if not base_type:
-                report.error = SemanticError(
-                    f"Line {ast_node.line}: Semantic error: could not determine type of base expression in property access."
-                )
-                yield report
-                return
-            
-            composite_sym = sym_table.lookup(base_type, ast_node.line, context_scope=current_scope)
-            if not composite_sym:
-                report.error = SemanticError(
-                    f"Line {ast_node.line}: Semantic error: composite type '{base_type}' not declared before use."
-                )
-                yield report
-                return
-
-            property_name = ast_node.variable.property.name
-            property_sym = sym_table.lookup_local(property_name, ast_node.line, scope=base_type)
-            if not property_sym:
-                report.error = SemanticError(
-                    f"Line {ast_node.line}: Semantic error: property '{property_name}' not found in composite type '{base_type}'."
-                )
-                yield report
-                return
-
-            report.action_bar_message = (
-                f"Property '{property_name}' found in composite type '{base_type}'."
-            )
-            report.looked_at_symbol = property_sym
-            if isinstance(ast_node.variable.property, Variable):
-                _annotate_symbol_use(ast_node.variable.property, property_sym)
-            _annotate_node_type(ast_node.variable, property_sym.data_type)
-            yield report
-            
-            # Process RHS expression after LHS property access checks are complete
-            yield from get_second_pass_reporter(ast_node.expression, sym_table, ast_node.line, current_scope)
-            return  # Property access checked, no need to check further
-        
-        if isinstance(ast_node.variable, Variable):
-            name_check = ast_node.variable.name
-            line_check = ast_node.line
-            focus_node_id = ast_node.variable.unique_id
-        elif isinstance(ast_node.variable, OneArrayAccess):
-            if not isinstance(ast_node.variable.array, Variable):
-                report.error = SemanticError(
-                    f"Line {ast_node.line}: Semantic error: assignment to array element must target a declared array identifier."
-                )
-                yield report
-                return
-            name_check = ast_node.variable.array.name
-            line_check = ast_node.line
-            focus_node_id = ast_node.variable.array.unique_id
-        elif isinstance(ast_node.variable, TwoArrayAccess):
-            if not isinstance(ast_node.variable.array, Variable):
-                report.error = SemanticError(
-                    f"Line {ast_node.line}: Semantic error: assignment to array element must target a declared array identifier."
-                )
-                yield report
-                return
-            name_check = ast_node.variable.array.name
-            line_check = ast_node.line
-            focus_node_id = ast_node.variable.array.unique_id
-        
-        sym = sym_table.lookup(name_check, line_check, context_scope=context)
-        report.looked_at_tree_node_id = focus_node_id
-        if not sym:
-            report.error = SemanticError(
-                f"Line {ast_node.line}: Semantic error: variable '{name_check}' not declared before use."
-            )
-            yield report
-            return
-
-        # Update the LHS node(s) with declared type information.
-        if isinstance(ast_node.variable, Variable):
-            _annotate_symbol_use(ast_node.variable, sym)
-        elif isinstance(ast_node.variable, OneArrayAccess) and isinstance(ast_node.variable.array, Variable):
-            _annotate_symbol_use(ast_node.variable.array, sym)
-            # If the LHS is an array element, annotate the access expression with the element type.
-            if sym.data_type.startswith("ARRAY[") or sym.data_type.startswith("2D ARRAY["):
-                inner = sym.data_type.split("[", 1)[1].rsplit("]", 1)[0].strip()
-                _annotate_node_type(ast_node.variable, inner)
-        elif isinstance(ast_node.variable, TwoArrayAccess) and isinstance(ast_node.variable.array, Variable):
-            _annotate_symbol_use(ast_node.variable.array, sym)
-            if sym.data_type.startswith("ARRAY[") or sym.data_type.startswith("2D ARRAY["):
-                inner = sym.data_type.split("[", 1)[1].rsplit("]", 1)[0].strip()
-                _annotate_node_type(ast_node.variable, inner)
-
-        # Constant assignment rule:
-        # - constants are declared via `CONSTANT ...` and can only be assigned once
-        # - the (single) assignment must be a literal
-        if sym.constant:
-            is_const_decl = bool(getattr(ast_node, "is_constant_declaration", False))
-            if not is_const_decl:
-                if sym.assigned:
-                    report.error = SemanticError(
-                        f"Line {ast_node.line}: Semantic error: cannot assign to constant '{name_check}' (constants can only be assigned once)."
-                    )
-                    yield report
-                    return
-                if not isinstance(ast_node.expression, Literal):
-                    report.error = SemanticError(
-                        f"Line {ast_node.line}: Semantic error: constants must be assigned a literal value."
-                    )
-                    yield report
-                    return
-                sym.assigned = True
-                report.action_bar_message = f"Initialized constant '{name_check}' with a literal value."
-                report.looked_at_symbol = sym
-                yield report
-                return
-
-            # For `CONSTANT x = <literal>` itself: accept it, and mark assigned.
-            if not isinstance(ast_node.expression, Literal):
-                report.error = SemanticError(
-                    f"Line {ast_node.line}: Semantic error: constants must be assigned a literal value."
-                )
-                yield report
-                return
-            sym.assigned = True
-        report.action_bar_message = f"Assignment to variable '{name_check}'. Found in context scope '{sym.scope}'."
-        report.looked_at_symbol = sym
-        yield report
-        
-        # Process RHS expression after LHS checks are complete
-        yield from get_second_pass_reporter(ast_node.expression, sym_table, ast_node.line, current_scope)
-
-    # Array access expressions
-    elif isinstance(ast_node, OneArrayAccess):
-        yield from get_second_pass_reporter(ast_node.array, sym_table, ast_node.line, current_scope)
-        yield from get_second_pass_reporter(ast_node.index, sym_table, ast_node.line, current_scope)
-        if isinstance(ast_node.array, Variable):
-            sym = sym_table.lookup(ast_node.array.name, ast_node.line, context_scope=current_scope)
-            if sym and (sym.data_type.startswith("ARRAY[") or sym.data_type.startswith("2D ARRAY[")):
-                inner = sym.data_type.split("[", 1)[1].rsplit("]", 1)[0].strip()
-                _annotate_node_type(ast_node, inner)
-        return
-
-    elif isinstance(ast_node, TwoArrayAccess):
-        yield from get_second_pass_reporter(ast_node.array, sym_table, ast_node.line, current_scope)
-        yield from get_second_pass_reporter(ast_node.index1, sym_table, ast_node.line, current_scope)
-        yield from get_second_pass_reporter(ast_node.index2, sym_table, ast_node.line, current_scope)
-        if isinstance(ast_node.array, Variable):
-            sym = sym_table.lookup(ast_node.array.name, ast_node.line, context_scope=current_scope)
-            if sym and (sym.data_type.startswith("ARRAY[") or sym.data_type.startswith("2D ARRAY[")):
-                inner = sym.data_type.split("[", 1)[1].rsplit("]", 1)[0].strip()
-                _annotate_node_type(ast_node, inner)
-        return
-        
-    # Declarations must check that when declaring a custom typed variable, the type exists
-    elif isinstance(ast_node, VariableDeclaration):
-        report.looked_at_tree_node_id = ast_node.unique_id
-        if ast_node.var_type in ["INTEGER", "REAL", "STRING", "BOOLEAN", "DATE","CHAR"]:
-                report.action_bar_message = f"Assignment has built-in data type '{ast_node.var_type}'."
-                report.looked_at_symbol = None
-                yield report
-                return
-        sym = sym_table.lookup(ast_node.var_type, ast_node.line, context_scope=current_scope)
-        if not sym:
-            report.error = SemanticError(
-                f"Line {ast_node.line}: Semantic error: data type '{ast_node.var_type}' not declared before use."
-            )
-            yield report
-            return
-        report.action_bar_message = f"Variable declaration of type '{ast_node.var_type}' verified."
-        report.looked_at_symbol = sym
-        yield report
-
-    elif isinstance(ast_node, OneArrayDeclaration | TwoArrayDeclaration):
-        report.looked_at_tree_node_id = ast_node.unique_id
-        if ast_node.var_type in ["INTEGER", "REAL", "STRING", "BOOLEAN", "DATE","CHAR"]:
-                report.action_bar_message = f"Assignment has built-in data type '{ast_node.var_type}'."
-                report.looked_at_symbol = None
-                yield report
-                return
-        sym = sym_table.lookup(ast_node.var_type, ast_node.line, context_scope=current_scope)
-        if not sym:
-            report.error = SemanticError(
-                f"Line {ast_node.line}: Semantic error: data type '{ast_node.var_type}' not declared before use."
-            )
-            yield report
-            return
-        report.action_bar_message = f"Type '{ast_node.var_type}' or array declaration found in context scope '{sym.scope}'."
-        report.looked_at_symbol = sym
-        yield report
-
-    elif isinstance(ast_node, ReturnStatement):
-        yield from get_second_pass_reporter(ast_node.expression, sym_table, ast_node.line, current_scope)
-
-    elif isinstance(ast_node, ReturnType):
-        report.looked_at_tree_node_id = ast_node.unique_id
-        if ast_node.type_name in ["INTEGER", "REAL", "STRING", "BOOLEAN", "DATE","CHAR"]:
-                report.action_bar_message = f"Return type has built-in data type '{ast_node.type_name}'."
-                report.looked_at_symbol = None
-                yield report
-                return
-        sym = sym_table.lookup(ast_node.type_name, ast_node.line, context_scope=current_scope)
-        if not sym:
-            report.error = SemanticError(
-                f"Line {ast_node.line}: Semantic error: return type '{ast_node.type_name}' not declared before use."
-            )
-            yield report
-            return
-        report.action_bar_message = f"Return type '{ast_node.type_name}' found in context scope '{sym.scope}'."
-        report.looked_at_symbol = sym
-        yield report
-
-    # Recursive cases
-    elif isinstance(ast_node, Condition):
-        # Unwrap the Condition node and process the inner expression
-        yield from get_second_pass_reporter(ast_node.expression, sym_table, ast_node.line, current_scope)
-    elif isinstance(ast_node, UnaryExpression):
-        yield from get_second_pass_reporter(ast_node.operand, sym_table, ast_node.line, current_scope)
-    elif isinstance(ast_node, BinaryExpression):
-        yield from get_second_pass_reporter(ast_node.left, sym_table, ast_node.line, current_scope)
-        yield from get_second_pass_reporter(ast_node.right, sym_table, ast_node.line, current_scope)
-    
-    # Built-in method/function nodes - process their arguments
-    elif isinstance(ast_node, RightStringMethod):
-        yield from get_second_pass_reporter(ast_node.string_expr, sym_table, ast_node.line, current_scope)
-        yield from get_second_pass_reporter(ast_node.count_expr, sym_table, ast_node.line, current_scope)
-    elif isinstance(ast_node, LengthStringMethod):
-        yield from get_second_pass_reporter(ast_node.string_expr, sym_table, ast_node.line, current_scope)
-    elif isinstance(ast_node, MidStringMethod):
-        yield from get_second_pass_reporter(ast_node.string_expr, sym_table, ast_node.line, current_scope)
-        yield from get_second_pass_reporter(ast_node.start_expr, sym_table, ast_node.line, current_scope)
-        yield from get_second_pass_reporter(ast_node.length_expr, sym_table, ast_node.line, current_scope)
-    elif isinstance(ast_node, LowerStringMethod):
-        yield from get_second_pass_reporter(ast_node.string_expr, sym_table, ast_node.line, current_scope)
-    elif isinstance(ast_node, UpperStringMethod):
-        yield from get_second_pass_reporter(ast_node.string_expr, sym_table, ast_node.line, current_scope)
-    elif isinstance(ast_node, IntCastMethod):
-        yield from get_second_pass_reporter(ast_node.expr, sym_table, ast_node.line, current_scope)
-    elif isinstance(ast_node, RandomRealMethod):
-        yield from get_second_pass_reporter(ast_node.high_expr, sym_table, ast_node.line, current_scope)
-    elif isinstance(ast_node, EOFStatement):
-        yield from get_second_pass_reporter(ast_node.filename, sym_table, ast_node.line, current_scope)
-    elif isinstance(ast_node, IfStatement):
-        yield from get_second_pass_reporter(ast_node.condition, sym_table, ast_node.line, current_scope)
-        yield from get_second_pass_reporter(ast_node.then_branch, sym_table, ast_node.line, current_scope)
-        if ast_node.else_branch:
-            yield from get_second_pass_reporter(ast_node.else_branch, sym_table, ast_node.line, current_scope)
-    elif isinstance(ast_node, ForStatement):
-        yield from get_second_pass_reporter(
-            ast_node.loop_variable, sym_table, ast_node.line, current_scope
-        )
-        yield from get_second_pass_reporter(
-            ast_node.bounds.lower_bound, sym_table, ast_node.line, current_scope
-        )
-        yield from get_second_pass_reporter(
-            ast_node.bounds.upper_bound, sym_table, ast_node.line, current_scope
-        )
-        yield from get_second_pass_reporter(ast_node.body, sym_table, ast_node.line, current_scope)
-    elif isinstance(ast_node, OpenFileStatement):
-        yield from get_second_pass_reporter(ast_node.filename, sym_table, ast_node.line, current_scope)
-    elif isinstance(ast_node, CloseFileStatement):
-        yield from get_second_pass_reporter(ast_node.filename, sym_table, ast_node.line, current_scope)
-    elif isinstance(ast_node, ReadFileStatement):
-        yield from get_second_pass_reporter(ast_node.filename, sym_table, ast_node.line, current_scope)
-        yield from get_second_pass_reporter(ast_node.variable, sym_table, ast_node.line, current_scope)
-    elif isinstance(ast_node, WriteFileStatement):
-        yield from get_second_pass_reporter(ast_node.filename, sym_table, ast_node.line, current_scope)
-        yield from get_second_pass_reporter(ast_node.expression, sym_table, ast_node.line, current_scope)
-    elif isinstance(ast_node, WhileStatement):
-        yield from get_second_pass_reporter(ast_node.condition, sym_table, ast_node.line, current_scope)
-        yield from get_second_pass_reporter(ast_node.body, sym_table, ast_node.line, current_scope)
-    elif isinstance(ast_node, PostWhileStatement):
-        yield from get_second_pass_reporter(ast_node.body, sym_table, ast_node.line, current_scope)
-        yield from get_second_pass_reporter(ast_node.condition, sym_table, ast_node.line, current_scope)
-    elif isinstance(ast_node, Statements):
-        for stmt in ast_node.statements:
-            yield from get_second_pass_reporter(stmt, sym_table, stmt.line, current_scope)
-    elif isinstance(ast_node, InputStatement):
-        yield from get_second_pass_reporter(ast_node.variable, sym_table, ast_node.line, current_scope)
-    elif isinstance(ast_node, OutputStatement):
-        for expr in ast_node.expressions:
-            yield from get_second_pass_reporter(expr, sym_table, ast_node.line, current_scope)
-    elif isinstance(ast_node, FunctionDefinition):
-        yield from get_second_pass_reporter(ast_node.body, sym_table, ast_node.line, ast_node.name)
-        yield from get_second_pass_reporter(ast_node.return_type, sym_table, ast_node.line, ast_node.name)
-    elif isinstance(ast_node, CaseStatement):
-        yield from get_second_pass_reporter(ast_node.variable, sym_table, ast_node.line, current_scope)
-        for case_body in ast_node.cases.values():
-            yield from get_second_pass_reporter(case_body, sym_table, ast_node.line, current_scope)
-    elif isinstance(ast_node, CompositeDataType):
-        # No variable usage in composite data type declaration
-        report.action_bar_message = f"Composite data type '{ast_node.name}' declaration; must check that field types are known."
-        report.looked_at_tree_node_id = ast_node.unique_id
-        report.looked_at_symbol = None
-        yield report
-        for field in ast_node.fields:
-            if field.type in ["INTEGER", "REAL", "STRING", "BOOLEAN", "DATE","CHAR"]:
-                report.action_bar_message = f"Field '{field.name}' of composite type '{ast_node.name}' has built-in data type '{field.type}'."
-                report.looked_at_tree_node_id = field.unique_id
-                report.looked_at_symbol = None
-                yield report
-                continue
-            else:
-                sym = sym_table.lookup(field.type, ast_node.line, context_scope=current_scope)
-                report.looked_at_tree_node_id = field.unique_id
-                if not sym:
-                    report.error = SemanticError(
-                        f"Line {ast_node.line}: Semantic error: data type '{field.type}' not found in scope '{current_scope}'."
-                    )
-                    yield report
-                    return
-                report.action_bar_message = f"Type '{field.type}' for field '{field.name}' of composite type '{ast_node.name}' found in context scope '{sym.scope}'."
-                report.looked_at_symbol = sym
-                yield report
-        return
