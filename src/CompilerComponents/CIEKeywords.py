@@ -21,7 +21,10 @@ __all__ = [
     "CIE_PARAM_MODIFIERS",
     "CIE_BOOLEAN_LITERALS",
     "CIE_ALL_KEYWORDS",
-    "CIE_SYMBOLS",
+    "CIE_STATEMENT_SYMBOLS",
+    "CIE_OPERATOR_SYMBOLS",
+    "CIE_DECLARATION_START_KEYWORDS",
+    "CIE_DECLARATION_END_KEYWORDS",
     "CIE_SPEC_STATUS",
 ]
 
@@ -34,7 +37,7 @@ CIE_TYPE_KEYWORDS = frozenset({
 })
 
 ### Statement Keywords ###
-# Control flow, declarations, subprograms
+# Control flow, declarations, subprograms, and file modes
 
 CIE_STATEMENT_KEYWORDS = frozenset({
     # Declarations
@@ -50,20 +53,35 @@ CIE_STATEMENT_KEYWORDS = frozenset({
     "RETURNS", "RETURN", "CALL",
     # Type definitions
     "TYPE", "ENDTYPE",
-    # Parameters (⏳ partial: not fully type-checked)
+    # File modes (✅)
+    "READ", "WRITE", "APPEND",
+    # Parameters (⚠ partial: not fully type-checked)
     "BYREF", "BYVAL",
 })
 
 ### Built-In Function Keywords ###
-# String, numeric, and file I/O functions
+# I/O, string, numeric, and file I/O functions
 
 CIE_BUILT_IN_FUNCTIONS = frozenset({
+    # I/O (✅)
+    "INPUT", "OUTPUT",
     # String functions (✅)
     "RIGHT", "LENGTH", "MID", "LCASE", "UCASE",
     # Numeric functions (✅)
     "INT", "RAND",
     # File I/O (✅)
     "OPENFILE", "READFILE", "WRITEFILE", "CLOSEFILE", "EOF",
+})
+
+### Declaration Keywords (Metadata for Symbol Table) ###
+# Keywords that start a declaration; used by Lexer's symbol table filler
+
+CIE_DECLARATION_START_KEYWORDS = frozenset({
+    "DECLARE", "CONSTANT", "FUNCTION", "PROCEDURE", "TYPE",
+})
+
+CIE_DECLARATION_END_KEYWORDS = frozenset({
+    "ENDFUNCTION", "ENDPROCEDURE", "ENDTYPE",
 })
 
 ### File Modes ###
@@ -128,12 +146,27 @@ CIE_ALL_KEYWORDS = (
 )
 
 ### Symbols (Special Characters) ###
-# Maps Python representation to (token_type, symbolic_name)
-# Used primarily by Lexer and Parser for multi-character operators
+# Statement symbols: punctuation and structural elements
+# Maps Python representation to (symbolic_name, description)
+# These are lexed as TokenType.STATEMENT_KEYWORDS
 
-CIE_SYMBOLS = {
+CIE_STATEMENT_SYMBOLS = {
     ":": ("COLON", "colon"),
     "<-": ("ASSIGN", "assignment"),
+    "(": ("LPAREN", "left_paren"),
+    ")": ("RPAREN", "right_paren"),
+    ";": ("SEMICOLON", "semicolon"),
+    ",": ("COMMA", "comma"),
+    "[": ("LBRACKET", "left_bracket"),
+    "]": ("RBRACKET", "right_bracket"),
+}
+
+### Operator Symbols ###
+# Arithmetic, relational, logical, and other operators
+# Maps Python representation to (symbolic_name, description)
+# These are lexed as TokenType.OPERATOR
+
+CIE_OPERATOR_SYMBOLS = {
     "+": ("PLUS", "plus"),
     "-": ("MINUS", "minus"),
     "*": ("MULTIPLY", "multiply"),
@@ -144,12 +177,6 @@ CIE_SYMBOLS = {
     ">": ("GT", "greater_than"),
     "<=": ("LTE", "less_than_or_equal"),
     ">=": ("GTE", "greater_than_or_equal"),
-    "(": ("LPAREN", "left_paren"),
-    ")": ("RPAREN", "right_paren"),
-    ";": ("SEMICOLON", "semicolon"),
-    ",": ("COMMA", "comma"),
-    "[": ("LBRACKET", "left_bracket"),
-    "]": ("RBRACKET", "right_bracket"),
     "&": ("AMPERSAND", "ampersand"),
     ".": ("DOT", "dot"),
 }

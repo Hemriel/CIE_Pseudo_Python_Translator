@@ -5,6 +5,17 @@ from CompilerComponents.ProgressReport import (
     TokenizationReport,
     LimitedSymbolTableReport,
 )
+from CompilerComponents.CIEKeywords import (
+    CIE_TYPE_KEYWORDS,
+    CIE_STATEMENT_KEYWORDS,
+    CIE_BUILT_IN_FUNCTIONS,
+    CIE_BOOLEAN_LITERALS,
+    CIE_OPERATORS,
+    CIE_STATEMENT_SYMBOLS,
+    CIE_OPERATOR_SYMBOLS,
+    CIE_DECLARATION_START_KEYWORDS,
+    CIE_DECLARATION_END_KEYWORDS,
+)
 from collections.abc import Generator
 from CompilerComponents.CleanLine import CleanLine
 
@@ -44,111 +55,68 @@ def remove_comments(lines: list[str]) -> list[str]:
     return cleaned_lines
 
 
-### Step 2: Tokens and symbol table ###
+### Step 2: Keyword-to-TokenType Mapping (derived from CIEKeywords) ###
 
-keywords_types = {
-    "INTEGER": TokenType.VARIABLE_TYPE,
-    "REAL": TokenType.VARIABLE_TYPE,
-    "CHAR": TokenType.VARIABLE_TYPE,
-    "BOOLEAN": TokenType.VARIABLE_TYPE,
-    "STRING": TokenType.VARIABLE_TYPE,
-    "DATE": TokenType.VARIABLE_TYPE,
-    "ARRAY": TokenType.VARIABLE_TYPE,
-    "TYPE": TokenType.STATEMENT_KEYWORDS,
-    "ENDTYPE": TokenType.STATEMENT_KEYWORDS,
-    "SET": TokenType.STATEMENT_KEYWORDS,
-    "OF": TokenType.STATEMENT_KEYWORDS,
-    "TRUE": TokenType.BOOLEAN_LITERAL,
-    "FALSE": TokenType.BOOLEAN_LITERAL,
-    "DECLARE": TokenType.STATEMENT_KEYWORDS,
-    "IF": TokenType.STATEMENT_KEYWORDS,
-    "THEN": TokenType.STATEMENT_KEYWORDS,
-    "ELSE": TokenType.STATEMENT_KEYWORDS,
-    "ENDIF": TokenType.STATEMENT_KEYWORDS,
-    "CASE": TokenType.STATEMENT_KEYWORDS,
-    "ENDCASE": TokenType.STATEMENT_KEYWORDS,
-    "OTHERWISE": TokenType.STATEMENT_KEYWORDS,
-    "FOR": TokenType.STATEMENT_KEYWORDS,
-    "TO": TokenType.STATEMENT_KEYWORDS,
-    "NEXT": TokenType.STATEMENT_KEYWORDS,
-    "REPEAT": TokenType.STATEMENT_KEYWORDS,
-    "UNTIL": TokenType.STATEMENT_KEYWORDS,
-    "WHILE": TokenType.STATEMENT_KEYWORDS,
-    "DO": TokenType.STATEMENT_KEYWORDS,
-    "ENDWHILE": TokenType.STATEMENT_KEYWORDS,
-    "INPUT": TokenType.NATIVE_FUNCTION,
-    "OUTPUT": TokenType.NATIVE_FUNCTION,
-    "CONSTANT": TokenType.STATEMENT_KEYWORDS,
-    "INT": TokenType.NATIVE_FUNCTION,
-    "RAND": TokenType.NATIVE_FUNCTION,
-    "PROCEDURE": TokenType.STATEMENT_KEYWORDS,
-    "ENDPROCEDURE": TokenType.STATEMENT_KEYWORDS,
-    "FUNCTION": TokenType.STATEMENT_KEYWORDS,
-    "ENDFUNCTION": TokenType.STATEMENT_KEYWORDS,
-    "RETURNS": TokenType.STATEMENT_KEYWORDS,
-    "CALL": TokenType.STATEMENT_KEYWORDS,
-    "RETURN": TokenType.STATEMENT_KEYWORDS,
-    "OPENFILE": TokenType.NATIVE_FUNCTION,
-    "READ": TokenType.STATEMENT_KEYWORDS,
-    "WRITE": TokenType.STATEMENT_KEYWORDS,
-    "APPEND": TokenType.STATEMENT_KEYWORDS,
-    "READFILE": TokenType.NATIVE_FUNCTION,
-    "EOF": TokenType.NATIVE_FUNCTION,
-    "WRITEFILE": TokenType.NATIVE_FUNCTION,
-    "CLOSEFILE": TokenType.NATIVE_FUNCTION,
-    "AND": TokenType.OPERATOR,
-    "OR": TokenType.OPERATOR,
-    "NOT": TokenType.OPERATOR,
-    "MOD": TokenType.OPERATOR,
-    "DIV": TokenType.OPERATOR,
-    "RIGHT": TokenType.NATIVE_FUNCTION,
-    "LENGTH": TokenType.NATIVE_FUNCTION,
-    "MID": TokenType.NATIVE_FUNCTION,
-    "LCASE": TokenType.NATIVE_FUNCTION,
-    "UCASE": TokenType.NATIVE_FUNCTION,
-}
+def _build_keywords_types_dict() -> dict[str, TokenType]:
+    """
+    Constructs the keywords_types mapping from CIE keyword sets.
+    This ensures the Lexer uses the same keyword definitions as the rest of the compiler.
+    Source of truth: CIEKeywords module.
+    
+    Returns:
+        dict[str, TokenType]: Maps keyword strings to their TokenType classification.
+    """
+    mapping = {}
+    
+    # Type keywords (e.g., INTEGER, REAL, ARRAY, TYPE, OF)
+    for kw in CIE_TYPE_KEYWORDS:
+        mapping[kw] = TokenType.VARIABLE_TYPE
+    
+    # Statement keywords (e.g., DECLARE, IF, WHILE, FUNCTION, PROCEDURE)
+    for kw in CIE_STATEMENT_KEYWORDS:
+        mapping[kw] = TokenType.STATEMENT_KEYWORDS
+    
+    # Built-in functions (e.g., LENGTH, INT, RAND, OPENFILE, READFILE)
+    for kw in CIE_BUILT_IN_FUNCTIONS:
+        mapping[kw] = TokenType.NATIVE_FUNCTION
+    
+    # Boolean literals (TRUE, FALSE)
+    for kw in CIE_BOOLEAN_LITERALS:
+        mapping[kw] = TokenType.BOOLEAN_LITERAL
+    
+    # Operators (only the keyword-based ones: AND, OR, NOT, MOD, DIV)
+    for kw in CIE_OPERATORS:
+        if kw in {"AND", "OR", "NOT", "MOD", "DIV"}:
+            mapping[kw] = TokenType.OPERATOR
+    
+    return mapping
 
-special_characters = [
-    ":",
-    "<",
-    "-",
-    "+",
-    "*",
-    ".",
-    "/",
-    "=",
-    ">",
-    "(",
-    ")",
-    ";",
-    ",",
-    "[",
-    "]",
-    "&",
-]
 
-symbols = {
-    ":": (TokenType.STATEMENT_KEYWORDS, "COLON"),
-    "<-": (TokenType.STATEMENT_KEYWORDS, "ASSIGN"),
-    "+": (TokenType.OPERATOR, "PLUS"),
-    "-": (TokenType.OPERATOR, "MINUS"),
-    "*": (TokenType.OPERATOR, "MULTIPLY"),
-    "/": (TokenType.OPERATOR, "DIVIDE"),
-    "=": (TokenType.OPERATOR, "EQ"),
-    "<>": (TokenType.OPERATOR, "NEQ"),
-    "<": (TokenType.OPERATOR, "LT"),
-    ">": (TokenType.OPERATOR, "GT"),
-    "<=": (TokenType.OPERATOR, "LTE"),
-    ">=": (TokenType.OPERATOR, "GTE"),
-    "(": (TokenType.STATEMENT_KEYWORDS, "LPAREN"),
-    ")": (TokenType.STATEMENT_KEYWORDS, "RPAREN"),
-    ";": (TokenType.STATEMENT_KEYWORDS, "SEMICOLON"),
-    ",": (TokenType.STATEMENT_KEYWORDS, "COMMA"),
-    "[": (TokenType.STATEMENT_KEYWORDS, "LBRACKET"),
-    "]": (TokenType.STATEMENT_KEYWORDS, "RBRACKET"),
-    "&": (TokenType.OPERATOR, "AMPERSAND"),
-    ".": (TokenType.OPERATOR, "DOT"),
-}
+def _build_symbols_dict() -> dict[str, tuple[TokenType, str]]:
+    """Constructs the symbols mapping from CIE symbol sets.
+    This ensures symbol definitions match the CIEKeywords source of truth.
+    
+    Returns:
+        dict[str, tuple[TokenType, str]]: Maps symbol strings to (TokenType, name) tuples.
+    """
+    mapping = {}
+    
+    # Statement symbols (punctuation, structural elements)
+    for symbol, (name, _) in CIE_STATEMENT_SYMBOLS.items():
+        mapping[symbol] = (TokenType.STATEMENT_KEYWORDS, name)
+    
+    # Operator symbols (arithmetic, relational, logical, etc.)
+    for symbol, (name, _) in CIE_OPERATOR_SYMBOLS.items():
+        mapping[symbol] = (TokenType.OPERATOR, name)
+    
+    return mapping
+
+
+# Initialize module-level dicts from CIEKeywords (single source of truth)
+keywords_types = _build_keywords_types_dict()
+symbols = _build_symbols_dict()
+
+### Step 3: Tokens and symbol table ###
 
 class LexingError(Exception):
     """Custom exception for lexical analysis errors."""
@@ -286,7 +254,16 @@ def _scan_next_token(line: CleanLine, i: int) -> tuple[Token, int, int, int, str
         token, next_i, kind = _scan_string_literal(line, start)
         return token, start, next_i, next_i, kind, line.content[start:next_i]
 
-    if ch in special_characters:
+    # Check if this character could start a symbol (single or multi-character operator)
+    # Look ahead for two-character operators first
+    if i + 1 < len(line.content):
+        two_char = line.content[i:i+2]
+        if two_char in symbols:
+            token, next_i, kind = _scan_symbol(line, start)
+            return token, start, next_i, next_i, kind, line.content[start:next_i]
+    
+    # Check for single-character operators
+    if ch in symbols:
         token, next_i, kind = _scan_symbol(line, start)
         return token, start, next_i, next_i, kind, line.content[start:next_i]
 
@@ -386,7 +363,7 @@ def get_clean_lines_tokenizer(
                 pre_report.action_bar_message = "Pattern matching string literal."
             elif ch == "'":
                 pre_report.action_bar_message = "Pattern matching character literal."
-            elif ch in special_characters:
+            elif ch in symbols or (i + 1 < len(line.content) and line.content[i:i+2] in symbols):
                 pre_report.action_bar_message = "Pattern matching symbol."
             else:
                 pre_report.action_bar_message = "Pattern matching token."
@@ -439,23 +416,16 @@ def get_limited_symbol_table_filler(
         report.looked_up_token_number = i
         report.new_symbol = None
 
-        if token.type == TokenType.STATEMENT_KEYWORDS and token.value in [
-            "DECLARE",
-            "CONSTANT",
-            "FUNCTION",
-            "PROCEDURE",
-            "TYPE",
-            "ENDFUNCTION",
-            "ENDPROCEDURE",
-            "ENDTYPE",
-        ]:
-            if token.value in ["DECLARE", "CONSTANT", "FUNCTION", "PROCEDURE", "TYPE"]:
+        if token.type == TokenType.STATEMENT_KEYWORDS and token.value in (
+            CIE_DECLARATION_START_KEYWORDS | CIE_DECLARATION_END_KEYWORDS
+        ):
+            if token.value in CIE_DECLARATION_START_KEYWORDS:
                 processing_declaration = True
                 report.action_bar_message = (
                     f"Processing declaration keyword: {token.value}."
                 )
                 declaration_type = token.value
-            elif token.value in ["ENDFUNCTION", "ENDPROCEDURE", "ENDTYPE"]:
+            elif token.value in CIE_DECLARATION_END_KEYWORDS:
                 if len(scopes) > 1:
                     scopes.pop()  # Exit scope
                 report.action_bar_message = f"Exiting scope for: {token.value}."
