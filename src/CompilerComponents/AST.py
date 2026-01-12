@@ -50,7 +50,9 @@ CIE_TO_PYTHON_TYPE_MAP = {
 # UI Action Bar Message Constants
 # These reduce typos and ensure consistent messaging across the codebase
 MSG_ARRAY_ACCESS_SIMPLE = "Generating code for simple array access"
-MSG_ARRAY_ACCESS_COMPLEX_BASE = "Generating code for array access (capturing complex base)"
+MSG_ARRAY_ACCESS_COMPLEX_BASE = (
+    "Generating code for array access (capturing complex base)"
+)
 MSG_ARRAY_ACCESS_INDEX = "Generating code for array access (indexing)"
 MSG_ARRAY_ACCESS_CLOSE = "Generating code for array access (close)"
 MSG_CASE_HEADER = "Generating code for case statement header"
@@ -92,7 +94,9 @@ def emit_array_initialization_1d(
     Yields:
         CodeGenerationReport events building the initialization statement.
     """
-    yield from _yield_report(f"Initializing 1D array: {var_name}", node_id, f"{indent}{var_name} = CIEArray(")
+    yield from _yield_report(
+        f"Initializing 1D array: {var_name}", node_id, f"{indent}{var_name} = CIEArray("
+    )
 
     yield from lower_bound.generate_code()
 
@@ -100,7 +104,11 @@ def emit_array_initialization_1d(
 
     yield from upper_bound.generate_code()
 
-    yield from _yield_report(f"1D array default value: {var_name}", node_id, f", {default_value_for_type(var_type)})\n")
+    yield from _yield_report(
+        f"1D array default value: {var_name}",
+        node_id,
+        f", {default_value_for_type(var_type)})\n",
+    )
 
 
 def emit_array_initialization_2d(
@@ -126,7 +134,9 @@ def emit_array_initialization_2d(
     Yields:
         CodeGenerationReport events building the initialization statement.
     """
-    yield from _yield_report(f"Initializing 2D array: {var_name}", node_id, f"{indent}{var_name} = CIEArray(")
+    yield from _yield_report(
+        f"Initializing 2D array: {var_name}", node_id, f"{indent}{var_name} = CIEArray("
+    )
 
     yield from lower_bound1.generate_code()
 
@@ -134,7 +144,11 @@ def emit_array_initialization_2d(
 
     yield from upper_bound1.generate_code()
 
-    yield from _yield_report(f"2D array default value: {var_name}", node_id, f", {default_value_for_type(var_type)}, ")
+    yield from _yield_report(
+        f"2D array default value: {var_name}",
+        node_id,
+        f", {default_value_for_type(var_type)}, ",
+    )
 
     yield from lower_bound2.generate_code()
 
@@ -170,9 +184,11 @@ def emit_block_statement(
     yield from body.generate_code(indent + "    ")
 
 
-def _create_report(message: str, node_id: ASTNodeId | None, code: str) -> Generator[CodeGenerationReport, None, None]:
+def _create_report(
+    message: str, node_id: ASTNodeId | None, code: str
+) -> Generator[CodeGenerationReport, None, None]:
     """Helper to create and yield a single report.
-    
+
     This is the primary utility for emitting CodeGenerationReport events throughout the AST.
     """
     report = CodeGenerationReport()
@@ -210,7 +226,9 @@ def emit_if_statement(
     yield from _create_report("Emitting if body...", node_id, ":\n")
     yield from then_body.generate_code(indent + "    ")
     if else_body:
-        yield from _create_report("Emitting else body...", node_id, f"\n{indent}else:\n")
+        yield from _create_report(
+            "Emitting else body...", node_id, f"\n{indent}else:\n"
+        )
         yield from else_body.generate_code(indent + "    ")
 
 
@@ -242,27 +260,27 @@ def emit_comma_separated_items(
 class ASTNode:
     """Base class for all AST nodes.
 
-    ```BNF:
-        <ast_node> ::= <expression> | <statement> | <statements>
-```
-    Attributes:
-        line (int): 1-based source line number where this node originates.
-        edges (list[ASTNode]): Canonical child nodes used for AST display and UI tree projection.
-        override_last (bool | None): UI hint used by `tree_representation()` to override whether
-            this node is rendered as the last child.
-        unique_id (NodeID | None): UI tree node id assigned during AST construction.
+        ```BNF:
+            <ast_node> ::= <expression> | <statement> | <statements>
+    ```
+        Attributes:
+            line (int): 1-based source line number where this node originates.
+            edges (list[ASTNode]): Canonical child nodes used for AST display and UI tree projection.
+            override_last (bool | None): UI hint used by `tree_representation()` to override whether
+                this node is rendered as the last child.
+            unique_id (NodeID | None): UI tree node id assigned during AST construction.
 
-    Methods:
-        tree_representation(prefix: str = "", is_last: bool = True) -> str:
-            Produces a human-readable tree (debug/UI).
-        unindented_representation() -> str:
-            One-line label used in the AST tree.
-        generate_code(indent: str = "", with_type: bool = False) -> Generator[CodeGenerationReport, None, None]:
-            Emits incremental code-generation events for this node.
+        Methods:
+            tree_representation(prefix: str = "", is_last: bool = True) -> str:
+                Produces a human-readable tree (debug/UI).
+            unindented_representation() -> str:
+                One-line label used in the AST tree.
+            generate_code(indent: str = "", with_type: bool = False) -> Generator[CodeGenerationReport, None, None]:
+                Emits incremental code-generation events for this node.
 
-    Notes:
-        This project intentionally generates Python by driving the `generate_code()` pipeline.
-        Do not add legacy string-returning codegen APIs back onto nodes.
+        Notes:
+            This project intentionally generates Python by driving the `generate_code()` pipeline.
+            Do not add legacy string-returning codegen APIs back onto nodes.
     """
 
     def __init__(self, line: int):
@@ -332,7 +350,9 @@ class ASTNode:
             "Subclasses must implement unindented_representation method"
         )
 
-    def generate_code(self, indent = "", with_type=False) -> Generator[CodeGenerationReport, None, None]:
+    def generate_code(
+        self, indent="", with_type=False
+    ) -> Generator[CodeGenerationReport, None, None]:
         """Yield `CodeGenerationReport` events that build the Python output.
 
         Args:
@@ -348,17 +368,17 @@ class ASTNode:
 class Expression(ASTNode):
     """Base class for expression nodes.
 
-    ```BNF:
-        <expression> ::= <logical_or>
-```
-    Attributes:
-        Inherits all `ASTNode` attributes.
+        ```BNF:
+            <expression> ::= <logical_or>
+    ```
+        Attributes:
+            Inherits all `ASTNode` attributes.
 
-    Methods:
-        generate_code(...): Generate a Python expression fragment (generally no trailing newline).
+        Methods:
+            generate_code(...): Generate a Python expression fragment (generally no trailing newline).
 
-    Notes:
-        Expressions are composed via precedence in the parser (see `Parser.py`).
+        Notes:
+            Expressions are composed via precedence in the parser (see `Parser.py`).
     """
 
     def __init__(self, line: int):
@@ -368,27 +388,27 @@ class Expression(ASTNode):
 class Statement(ASTNode):
     """Base class for statement nodes.
 
-    ```BNF:
-        <statement> ::= <declaration>
-```                     | <assignment>
-                     | <input_stmt>
-                     | <output_stmt>
-                     | <if_stmt>
-                     | <case_stmt>
-                     | <while_stmt>
-                     | <repeat_until_stmt>
-                     | <for_stmt>
-                     | <function_def>
-                     | <return_stmt>
-                     | <procedure_call_stmt>
-                     | <type_def>
-                     | <openfile_stmt> | <readfile_stmt> | <writefile_stmt> | <closefile_stmt>
+        ```BNF:
+            <statement> ::= <declaration>
+    ```                     | <assignment>
+                         | <input_stmt>
+                         | <output_stmt>
+                         | <if_stmt>
+                         | <case_stmt>
+                         | <while_stmt>
+                         | <repeat_until_stmt>
+                         | <for_stmt>
+                         | <function_def>
+                         | <return_stmt>
+                         | <procedure_call_stmt>
+                         | <type_def>
+                         | <openfile_stmt> | <readfile_stmt> | <writefile_stmt> | <closefile_stmt>
 
-    Attributes:
-        Inherits all `ASTNode` attributes.
+        Attributes:
+            Inherits all `ASTNode` attributes.
 
-    Methods:
-        generate_code(...): Generate statement-level Python code (typically includes newlines).
+        Methods:
+            generate_code(...): Generate statement-level Python code (typically includes newlines).
     """
 
     def __init__(self, line: int):
@@ -398,17 +418,17 @@ class Statement(ASTNode):
 class Assignable(ASTNode):
     """Base class for assignable expressions (valid assignment targets).
 
-    ```BNF:
-        <assignable> ::= <variable> | <array_access_1d> | <array_access_2d> | <property_access>
-```
-    Attributes:
-        Inherits all `ASTNode` attributes.
+        ```BNF:
+            <assignable> ::= <variable> | <array_access_1d> | <array_access_2d> | <property_access>
+    ```
+        Attributes:
+            Inherits all `ASTNode` attributes.
 
-    Methods:
-        generate_code(...): Generate the Python l-value expression.
+        Methods:
+            generate_code(...): Generate the Python l-value expression.
 
-    Notes:
-        The parser enforces assignment targets to be assignable.
+        Notes:
+            The parser enforces assignment targets to be assignable.
     """
 
     def __init__(self, line: int):
@@ -418,23 +438,23 @@ class Assignable(ASTNode):
 class Literal(Expression):
     """Literal value in an expression.
 
-    ```BNF:
-        <literal> ::= INT_LITERAL | REAL_LITERAL | CHAR_LITERAL | STRING_LITERAL
-```                    | BOOLEAN_LITERAL | DATE_LITERAL
+        ```BNF:
+            <literal> ::= INT_LITERAL | REAL_LITERAL | CHAR_LITERAL | STRING_LITERAL
+    ```                    | BOOLEAN_LITERAL | DATE_LITERAL
 
-    Attributes:
-        type (str): Canonical literal category (e.g., "INTEGER", "STRING"). Derived via `LITERAL_TYPES`.
-        value (str): Raw literal lexeme from the token stream.
+        Attributes:
+            type (str): Canonical literal category (e.g., "INTEGER", "STRING"). Derived via `LITERAL_TYPES`.
+            value (str): Raw literal lexeme from the token stream.
 
-    Methods:
-        python_source() -> str:
-            Formats the literal as Python source text for labels/UI.
-        generate_code(indent: str = "") -> Generator[CodeGenerationReport, None, None]:
-            Generate the literal as Python source text for labels/UI.
+        Methods:
+            python_source() -> str:
+                Formats the literal as Python source text for labels/UI.
+            generate_code(indent: str = "") -> Generator[CodeGenerationReport, None, None]:
+                Generate the literal as Python source text for labels/UI.
 
-    Notes:
-        `python_source()` exists for places that need a compact Python-formatted literal string
-        without driving full code generation.
+        Notes:
+            `python_source()` exists for places that need a compact Python-formatted literal string
+            without driving full code generation.
     """
 
     def __init__(self, lit_type: TokenType, value: str, line: int):
@@ -471,8 +491,10 @@ class Literal(Expression):
         if self.type == "DATE":
             return f'"{self.value}"'
         return self.value
-    
-    def generate_code(self, indent = "", with_type=False) -> Generator[CodeGenerationReport, None, None]:
+
+    def generate_code(
+        self, indent="", with_type=False
+    ) -> Generator[CodeGenerationReport, None, None]:
         new_code = ""
         if self.type == "STRING":
             new_code = f'"{self.value}"'
@@ -486,26 +508,28 @@ class Literal(Expression):
             new_code = f'"{self.value}"'
         else:  # INTEGER, REAL
             new_code = self.value
-        
-        yield from _yield_report(f"Generating code for literal: {self.value}", self.unique_id, new_code)
+
+        yield from _yield_report(
+            f"Generating code for literal: {self.value}", self.unique_id, new_code
+        )
 
 
 class Variable(Expression, Assignable):
     """Identifier reference (variable or constant).
 
-    ```BNF:
-        <variable> ::= IDENTIFIER
-```
-    Attributes:
-        name (str): Identifier text.
-        type (str): CIE type name associated with the identifier ("unknown" until inferred/declared).
+        ```BNF:
+            <variable> ::= IDENTIFIER
+    ```
+        Attributes:
+            name (str): Identifier text.
+            type (str): CIE type name associated with the identifier ("unknown" until inferred/declared).
 
-    Methods:
-        generate_code(indent: str = "", with_type: bool = False) -> Generator[CodeGenerationReport, None, None]:
-            Generate the identifier name, optionally with a Python type annotation.
+        Methods:
+            generate_code(indent: str = "", with_type: bool = False) -> Generator[CodeGenerationReport, None, None]:
+                Generate the identifier name, optionally with a Python type annotation.
 
-    Notes:
-        This node also inherits `Assignable` and functions as a valid assignment target.
+        Notes:
+            This node also inherits `Assignable` and functions as a valid assignment target.
     """
 
     def __init__(self, name: str, line: int, type: str = "unknown"):
@@ -515,12 +539,16 @@ class Variable(Expression, Assignable):
 
     def unindented_representation(self) -> str:
         return f"Identifier: {self.name} : {self.type}"
-    
-    def generate_code(self, indent = "", with_type=False) -> Generator[CodeGenerationReport, None, None]:
+
+    def generate_code(
+        self, indent="", with_type=False
+    ) -> Generator[CodeGenerationReport, None, None]:
         code = self.name
         if with_type and self.type != "unknown" and "ARRAY" not in self.type:
             code += f": {CIE_TO_PYTHON_TYPE_MAP.get(self.type, self.type)}"
-        yield from _yield_report(f"Generating code for variable: {self.name}", self.unique_id, code)
+        yield from _yield_report(
+            f"Generating code for variable: {self.name}", self.unique_id, code
+        )
 
     def __repr__(self):
         return f"VariableNode({self.name})"
@@ -529,16 +557,16 @@ class Variable(Expression, Assignable):
 class Argument(Expression):
     """Typed argument used in function/procedure definitions.
 
-    ```BNF:
-        <parameter> ::= IDENTIFIER ':' <type>
-```
-    Attributes:
-        name (str): Parameter identifier.
-        arg_type (str): CIE type name for the parameter.
+        ```BNF:
+            <parameter> ::= IDENTIFIER ':' <type>
+    ```
+        Attributes:
+            name (str): Parameter identifier.
+            arg_type (str): CIE type name for the parameter.
 
-    Methods:
-        generate_code(indent: str = "", with_type: bool = False) -> Generator[CodeGenerationReport, None, None]:
-            Generate the parameter name, optionally with a Python type annotation.
+        Methods:
+            generate_code(indent: str = "", with_type: bool = False) -> Generator[CodeGenerationReport, None, None]:
+                Generate the parameter name, optionally with a Python type annotation.
     """
 
     def __init__(self, name: str, arg_type: str, line: int):
@@ -548,12 +576,16 @@ class Argument(Expression):
 
     def unindented_representation(self) -> str:
         return f"Argument: {self.name} : {self.arg_type}"
-    
-    def generate_code(self, indent = "", with_type=False) -> Generator[CodeGenerationReport, None, None]:
+
+    def generate_code(
+        self, indent="", with_type=False
+    ) -> Generator[CodeGenerationReport, None, None]:
         code = self.name
         if with_type and self.arg_type != "unknown" and "ARRAY" not in self.arg_type:
             code += f": {CIE_TO_PYTHON_TYPE_MAP.get(self.arg_type, self.arg_type)}"
-        yield from _yield_report(f"Generating code for argument: {self.name}", self.unique_id, code)
+        yield from _yield_report(
+            f"Generating code for argument: {self.name}", self.unique_id, code
+        )
 
     def __repr__(self):
         return f"ArgumentNode({self.name}, {self.arg_type})"
@@ -562,21 +594,21 @@ class Argument(Expression):
 class VariableDeclaration(Statement):
     """DECLARE/CONSTANT typed variable declaration.
 
-    ```BNF:
-        <declaration> ::= ('DECLARE' | 'CONSTANT') <identifier_list> ':' <type>
-```        <identifier_list> ::= IDENTIFIER (',' IDENTIFIER)*
+        ```BNF:
+            <declaration> ::= ('DECLARE' | 'CONSTANT') <identifier_list> ':' <type>
+    ```        <identifier_list> ::= IDENTIFIER (',' IDENTIFIER)*
 
-    Attributes:
-        var_type (str): CIE type name for all declared variables.
-        variables (list[Variable]): Variables declared in this statement.
-        is_constant (bool): Whether this declaration originated from `CONSTANT`.
+        Attributes:
+            var_type (str): CIE type name for all declared variables.
+            variables (list[Variable]): Variables declared in this statement.
+            is_constant (bool): Whether this declaration originated from `CONSTANT`.
 
-    Methods:
-        generate_code(indent: str = "") -> Generator[CodeGenerationReport, None, None]:
-            Generate Python assignments with default initialization for each declared variable.
+        Methods:
+            generate_code(indent: str = "") -> Generator[CodeGenerationReport, None, None]:
+                Generate Python assignments with default initialization for each declared variable.
 
-    Notes:
-        This compiler initializes declared variables to a default value (see `default_value_for_type`).
+        Notes:
+            This compiler initializes declared variables to a default value (see `default_value_for_type`).
     """
 
     def __init__(
@@ -590,19 +622,23 @@ class VariableDeclaration(Statement):
         self.variables = variables
         self.is_constant = is_constant
         self.var_type = var_type
-        self.edges = self._as_edges(variables)  
+        self.edges = self._as_edges(variables)
 
     def unindented_representation(self) -> str:
         result = "Constant" if self.is_constant else "Declaration"
         if len(self.variables) > 1:
             result += "s"
         return result
-    
-    def generate_code(self, indent = "") -> Generator[CodeGenerationReport, None, None]:
+
+    def generate_code(self, indent="") -> Generator[CodeGenerationReport, None, None]:
         for variable in self.variables:
             default_value = default_value_for_type(self.var_type)
             code = f"{indent}{variable.name} : {CIE_TO_PYTHON_TYPE_MAP.get(self.var_type, self.var_type)} = {default_value}\n"
-            yield from _yield_report(f"Generating code for variable declaration: {variable.name}", self.unique_id, code)
+            yield from _yield_report(
+                f"Generating code for variable declaration: {variable.name}",
+                self.unique_id,
+                code,
+            )
 
     def __repr__(self):
         return f"VarDeclNode({self.var_type}, {self.variables}, line {self.line})"
@@ -611,19 +647,19 @@ class VariableDeclaration(Statement):
 class Bounds(ASTNode):
     """Array bounds pair used by array declarations and FOR loops.
 
-    ```BNF:
-        <bounds> ::= <expression> ':' <expression>
-```
-    Attributes:
-        lower_bound (Expression): Lower bound expression.
-        upper_bound (Expression): Upper bound expression.
+        ```BNF:
+            <bounds> ::= <expression> ':' <expression>
+    ```
+        Attributes:
+            lower_bound (Expression): Lower bound expression.
+            upper_bound (Expression): Upper bound expression.
 
-    Methods:
-        generate_code(...): Generate the two bound expressions separated by a comma.
+        Methods:
+            generate_code(...): Generate the two bound expressions separated by a comma.
 
-    Notes:
-        For arrays with non-1 lower bounds, the code generator stores bound metadata
-        alongside the underlying list so accesses can offset by the lower bound.
+        Notes:
+            For arrays with non-1 lower bounds, the code generator stores bound metadata
+            alongside the underlying list so accesses can offset by the lower bound.
     """
 
     def __init__(
@@ -639,13 +675,15 @@ class Bounds(ASTNode):
 
     def unindented_representation(self) -> str:
         return "Bounds"
-    
-    def generate_code(self, indent = "") -> Generator[CodeGenerationReport, None, None]:
+
+    def generate_code(self, indent="") -> Generator[CodeGenerationReport, None, None]:
         # Generate code for lower bound
         yield from self.lower_bound.generate_code()
 
         # Generate comma separator
-        yield from _yield_report("Generating code for bounds separator", self.unique_id, ", ")
+        yield from _yield_report(
+            "Generating code for bounds separator", self.unique_id, ", "
+        )
 
         # Generate code for upper bound
         yield from self.upper_bound.generate_code()
@@ -654,21 +692,21 @@ class Bounds(ASTNode):
 class OneArrayDeclaration(Statement):
     """DECLARE statement for a one-dimensional array.
 
-    ```BNF:
-        <array_decl_1d> ::= ('DECLARE' | 'CONSTANT') <identifier_list> ':' 'ARRAY'
-```                            '[' <bounds> ']' 'OF' <type>
+        ```BNF:
+            <array_decl_1d> ::= ('DECLARE' | 'CONSTANT') <identifier_list> ':' 'ARRAY'
+    ```                            '[' <bounds> ']' 'OF' <type>
 
-    Attributes:
-        var_type (str): CIE type name of the array elements.
-        variable (list[Variable]): One or more array variables being declared.
-        bounds (Bounds): Lower/upper bound of the array indices.
+        Attributes:
+            var_type (str): CIE type name of the array elements.
+            variable (list[Variable]): One or more array variables being declared.
+            bounds (Bounds): Lower/upper bound of the array indices.
 
-    Methods:
-        generate_code(indent: str = "") -> Generator[CodeGenerationReport, self.unique_id, None, None]:
-            Emits Python `CIEArray(...)` initialization preserving bounds.
+        Methods:
+            generate_code(indent: str = "") -> Generator[CodeGenerationReport, self.unique_id, None, None]:
+                Emits Python `CIEArray(...)` initialization preserving bounds.
 
-    Notes:
-        Arrays are compiled using the runtime helper `CIEArray`.
+        Notes:
+            Arrays are compiled using the runtime helper `CIEArray`.
     """
 
     def __init__(
@@ -688,8 +726,8 @@ class OneArrayDeclaration(Statement):
 
     def unindented_representation(self) -> str:
         return "Constant: 1D Array" if self.is_constant else "Declaration: 1D Array"
-    
-    def generate_code(self, indent = "") -> Generator[CodeGenerationReport, None, None]:
+
+    def generate_code(self, indent="") -> Generator[CodeGenerationReport, None, None]:
         for variable in self.variable:
             yield from emit_array_initialization_1d(
                 self.unique_id,
@@ -707,22 +745,22 @@ class OneArrayDeclaration(Statement):
 class TwoArrayDeclaration(Statement):
     """DECLARE statement for a two-dimensional array.
 
-    ```BNF:
-        <array_decl_2d> ::= ('DECLARE' | 'CONSTANT') <identifier_list> ':' 'ARRAY'
-```                            '[' <bounds> ',' <bounds> ']' 'OF' <type>
+        ```BNF:
+            <array_decl_2d> ::= ('DECLARE' | 'CONSTANT') <identifier_list> ':' 'ARRAY'
+    ```                            '[' <bounds> ',' <bounds> ']' 'OF' <type>
 
-    Attributes:
-        var_type (str): CIE type name of the array elements.
-        variable (list[Variable]): One or more array variables being declared.
-        bounds1 (Bounds): Bounds for the first dimension.
-        bounds2 (Bounds): Bounds for the second dimension.
+        Attributes:
+            var_type (str): CIE type name of the array elements.
+            variable (list[Variable]): One or more array variables being declared.
+            bounds1 (Bounds): Bounds for the first dimension.
+            bounds2 (Bounds): Bounds for the second dimension.
 
-    Methods:
-        generate_code(indent: str = "") -> Generator[CodeGenerationReport, None, None]:
-            Emits Python `CIEArray(...)` initialization preserving bounds.
+        Methods:
+            generate_code(indent: str = "") -> Generator[CodeGenerationReport, None, None]:
+                Emits Python `CIEArray(...)` initialization preserving bounds.
 
-    Notes:
-        2D arrays are compiled using the runtime helper `CIEArray`.
+        Notes:
+            2D arrays are compiled using the runtime helper `CIEArray`.
     """
 
     def __init__(
@@ -744,7 +782,7 @@ class TwoArrayDeclaration(Statement):
 
     def unindented_representation(self) -> str:
         return "Constant: 2D Array" if self.is_constant else "Declaration: 2D Array"
-    
+
     def generate_code(self, indent="") -> Generator[CodeGenerationReport, None, None]:
         for variable in self.variable:
             yield from emit_array_initialization_2d(
@@ -757,25 +795,25 @@ class TwoArrayDeclaration(Statement):
                 self.bounds2.upper_bound,
                 self.var_type,
             )
-        
+
 
 class OneArrayAccess(Expression, Assignable):
     """One-dimensional array access expression.
 
-    ```BNF:
-        <array_access_1d> ::= IDENTIFIER '[' <expression> ']'
-```
-    Attributes:
-        array (Variable): Array identifier.
-        index (Expression): Index expression (CIE index space).
+        ```BNF:
+            <array_access_1d> ::= IDENTIFIER '[' <expression> ']'
+    ```
+        Attributes:
+            array (Variable): Array identifier.
+            index (Expression): Index expression (CIE index space).
 
-    Methods:
-        generate_code(...): Emits Python indexing into `CIEArray`, letting the runtime
-            handle bounds/offsets.
+        Methods:
+            generate_code(...): Emits Python indexing into `CIEArray`, letting the runtime
+                handle bounds/offsets.
 
-    Notes:
-        Arrays are represented using the runtime helper `CIEArray`.
-        This node compiles `A[i]` into `(A[i])`.
+        Notes:
+            Arrays are represented using the runtime helper `CIEArray`.
+            This node compiles `A[i]` into `(A[i])`.
     """
 
     def __init__(self, array: Expression, index: Expression, line: int):
@@ -786,23 +824,35 @@ class OneArrayAccess(Expression, Assignable):
 
     def unindented_representation(self) -> str:
         return "Array Access [1D]"
-    
+
     def generate_code(self, indent="") -> Generator[CodeGenerationReport, None, None]:
         # Arrays are represented via CIEArray (offsets handled by the class).
         # If the base is not a simple variable, avoid re-evaluating it by capturing it once.
         if isinstance(self.array, Variable):
             base_name = self.array.name
-            yield from _yield_report(f"{MSG_ARRAY_ACCESS_SIMPLE}: {base_name}", self.unique_id, f"({base_name}[")
+            yield from _yield_report(
+                f"{MSG_ARRAY_ACCESS_SIMPLE}: {base_name}",
+                self.unique_id,
+                f"({base_name}[",
+            )
             yield from self.index.generate_code()
-            yield from _yield_report(f"{MSG_ARRAY_ACCESS_CLOSE}: {base_name}", self.unique_id, "])")
+            yield from _yield_report(
+                f"{MSG_ARRAY_ACCESS_CLOSE}: {base_name}", self.unique_id, "])"
+            )
             return
 
         tmp_name = f"CIE_TMP_{self.unique_id}"
-        yield from _yield_report(f"{MSG_ARRAY_ACCESS_COMPLEX_BASE}", self.unique_id, f"(({tmp_name} := ")
+        yield from _yield_report(
+            f"{MSG_ARRAY_ACCESS_COMPLEX_BASE}", self.unique_id, f"(({tmp_name} := "
+        )
         yield from self.array.generate_code()
-        yield from _yield_report("Generating code for 1D array access (indexing)", self.unique_id, ")[")
+        yield from _yield_report(
+            "Generating code for 1D array access (indexing)", self.unique_id, ")["
+        )
         yield from self.index.generate_code()
-        yield from _yield_report("Generating code for 1D array access (close)", self.unique_id, "])")
+        yield from _yield_report(
+            "Generating code for 1D array access (close)", self.unique_id, "])"
+        )
 
     def __repr__(self):
         return f"ArrayAccessNode({self.array}, {self.index}, line {self.line})"
@@ -811,21 +861,21 @@ class OneArrayAccess(Expression, Assignable):
 class TwoArrayAccess(Expression, Assignable):
     """Two-dimensional array access expression.
 
-    ```BNF:
-        <array_access_2d> ::= IDENTIFIER '[' <expression> ',' <expression> ']'
-```
-    Attributes:
-        array (Variable): Array identifier.
-        index1 (Expression): First-dimension index expression (CIE index space).
-        index2 (Expression): Second-dimension index expression (CIE index space).
+        ```BNF:
+            <array_access_2d> ::= IDENTIFIER '[' <expression> ',' <expression> ']'
+    ```
+        Attributes:
+            array (Variable): Array identifier.
+            index1 (Expression): First-dimension index expression (CIE index space).
+            index2 (Expression): Second-dimension index expression (CIE index space).
 
-    Methods:
-        generate_code(...): Emits Python indexing into `CIEArray`, letting the runtime
-            handle bounds/offsets.
+        Methods:
+            generate_code(...): Emits Python indexing into `CIEArray`, letting the runtime
+                handle bounds/offsets.
 
-    Notes:
-        2D arrays are represented using the runtime helper `CIEArray`.
-        This node compiles `A[i,j]` into `(A[i, j])`.
+        Notes:
+            2D arrays are represented using the runtime helper `CIEArray`.
+            This node compiles `A[i,j]` into `(A[i, j])`.
     """
 
     def __init__(
@@ -839,24 +889,34 @@ class TwoArrayAccess(Expression, Assignable):
 
     def unindented_representation(self) -> str:
         return "Array Access [2D]"
-    
+
     def generate_code(self, indent="") -> Generator[CodeGenerationReport, None, None]:
         # 2D arrays are represented via CIEArray (offsets handled by the class).
         if isinstance(self.array, Variable):
             base_name = self.array.name
-            yield from _yield_report(f"{MSG_ARRAY_ACCESS_SIMPLE}: {base_name}", self.unique_id, f"({base_name}[")
+            yield from _yield_report(
+                f"{MSG_ARRAY_ACCESS_SIMPLE}: {base_name}",
+                self.unique_id,
+                f"({base_name}[",
+            )
             yield from self.index1.generate_code()
             yield from _yield_report(f"{MSG_ARRAY_ACCESS_INDEX}", self.unique_id, ", ")
             yield from self.index2.generate_code()
-            yield from _yield_report(f"{MSG_ARRAY_ACCESS_CLOSE}: {base_name}", self.unique_id, "])")
+            yield from _yield_report(
+                f"{MSG_ARRAY_ACCESS_CLOSE}: {base_name}", self.unique_id, "])"
+            )
             return
 
         tmp_name = f"CIE_TMP_{self.unique_id}"
-        yield from _yield_report(f"{MSG_ARRAY_ACCESS_COMPLEX_BASE}", self.unique_id, f"(({tmp_name} := ")
+        yield from _yield_report(
+            f"{MSG_ARRAY_ACCESS_COMPLEX_BASE}", self.unique_id, f"(({tmp_name} := "
+        )
         yield from self.array.generate_code()
         yield from _yield_report(f"{MSG_ARRAY_ACCESS_INDEX}", self.unique_id, ")[")
         yield from self.index1.generate_code()
-        yield from _yield_report("Generating code for 2D array access (comma)", self.unique_id, ", ")
+        yield from _yield_report(
+            "Generating code for 2D array access (comma)", self.unique_id, ", "
+        )
         yield from self.index2.generate_code()
         yield from _yield_report(f"{MSG_ARRAY_ACCESS_CLOSE}", self.unique_id, "])")
 
@@ -867,18 +927,18 @@ class TwoArrayAccess(Expression, Assignable):
 class PropertyAccess(Expression, Assignable):
     """Property access expression (record field access).
 
-    ```BNF:
-        <property_access> ::= IDENTIFIER '.' IDENTIFIER
-```
-    Attributes:
-        variable (Variable): Base record/object expression (identifier in current grammar).
-        property (Variable): Field name.
+        ```BNF:
+            <property_access> ::= IDENTIFIER '.' IDENTIFIER
+    ```
+        Attributes:
+            variable (Variable): Base record/object expression (identifier in current grammar).
+            property (Variable): Field name.
 
-    Methods:
-        generate_code(...): Emits a Python dotted access `base.field`.
+        Methods:
+            generate_code(...): Emits a Python dotted access `base.field`.
 
-    Notes:
-        This is used for user-defined record types compiled to Python classes.
+        Notes:
+            This is used for user-defined record types compiled to Python classes.
     """
 
     def __init__(self, variable: Expression, property: Variable, line: int):
@@ -889,10 +949,14 @@ class PropertyAccess(Expression, Assignable):
 
     def unindented_representation(self) -> str:
         return "Property Access"
-    
+
     def generate_code(self, indent="") -> Generator[CodeGenerationReport, None, None]:
         yield from self.variable.generate_code()
-        yield from _yield_report(f"Generating code for property access: {self.property.name}", self.unique_id, f".")
+        yield from _yield_report(
+            f"Generating code for property access: {self.property.name}",
+            self.unique_id,
+            f".",
+        )
         yield from self.property.generate_code()
 
     def __repr__(self):
@@ -902,20 +966,20 @@ class PropertyAccess(Expression, Assignable):
 class CompositeDataType(Statement):
     """TYPE definition for a composite/record-like data type.
 
-    ```BNF:
-        <type_def> ::= 'TYPE' IDENTIFIER <field_decl>* 'ENDTYPE'
-```        <field_decl> ::= 'DECLARE' IDENTIFIER ':' <type>
+        ```BNF:
+            <type_def> ::= 'TYPE' IDENTIFIER <field_decl>* 'ENDTYPE'
+    ```        <field_decl> ::= 'DECLARE' IDENTIFIER ':' <type>
 
-    Attributes:
-        name (str): Name of the type being declared.
-        fields (list[Variable]): Field declarations as Variables (with `type` filled).
+        Attributes:
+            name (str): Name of the type being declared.
+            fields (list[Variable]): Field declarations as Variables (with `type` filled).
 
-    Methods:
-        generate_code(...): Emits a Python class with an `__init__` that initializes fields
-            to default values.
+        Methods:
+            generate_code(...): Emits a Python class with an `__init__` that initializes fields
+                to default values.
 
-    Notes:
-        Fields are stored as Variables so they can reuse type mapping and default initialization.
+        Notes:
+            Fields are stored as Variables so they can reuse type mapping and default initialization.
     """
 
     def __init__(self, name: str, fields: list[Variable], line: int):
@@ -926,26 +990,34 @@ class CompositeDataType(Statement):
 
     def unindented_representation(self) -> str:
         return f"Type Declaration: {self.name}"
-    
+
     def generate_code(self, indent="") -> Generator[CodeGenerationReport, None, None]:
-        yield from _yield_report(f"Generating code for composite data type: {self.name}", self.unique_id, f"{indent}class {self.name}:\n{indent}    def __init__(self):\n")
+        yield from _yield_report(
+            f"Generating code for composite data type: {self.name}",
+            self.unique_id,
+            f"{indent}class {self.name}:\n{indent}    def __init__(self):\n",
+        )
         for field_name in self.fields:
             field_code = f"{indent}        self.{field_name.name} : {CIE_TO_PYTHON_TYPE_MAP.get(field_name.type, field_name.type)} = {default_value_for_type(field_name.type)}\n"
-            yield from _yield_report(f"Generating code for field: {field_name.name} in composite data type: {self.name}", field_name.unique_id, field_code)
+            yield from _yield_report(
+                f"Generating code for field: {field_name.name} in composite data type: {self.name}",
+                field_name.unique_id,
+                field_code,
+            )
 
 
 class RightStringMethod(Expression):
     """Built-in RIGHT(string, count) string function.
 
-    ```BNF:
-        <primary> ::= 'RIGHT' '(' <expression> ',' <expression> ')'
-```
-    Attributes:
-        string_expr (Expression): String expression.
-        count_expr (Expression): Number of characters to keep from the right.
+        ```BNF:
+            <primary> ::= 'RIGHT' '(' <expression> ',' <expression> ')'
+    ```
+        Attributes:
+            string_expr (Expression): String expression.
+            count_expr (Expression): Number of characters to keep from the right.
 
-    Methods:
-        generate_code(...): Emits a Python slice `s[-n:]`.
+        Methods:
+            generate_code(...): Emits a Python slice `s[-n:]`.
     """
 
     def __init__(self, string_expr: Expression, count_expr: Expression, line: int):
@@ -956,13 +1028,21 @@ class RightStringMethod(Expression):
 
     def unindented_representation(self) -> str:
         return "RIGHT Method"
-    
+
     def generate_code(self, indent="") -> Generator[CodeGenerationReport, None, None]:
-        yield from _yield_report("Generating code for RIGHT string method...", self.unique_id, f"(")
+        yield from _yield_report(
+            "Generating code for RIGHT string method...", self.unique_id, f"("
+        )
         yield from self.string_expr.generate_code()
-        yield from _yield_report("Generating code for RIGHT string method (adding slice)...", self.unique_id, "[-")
+        yield from _yield_report(
+            "Generating code for RIGHT string method (adding slice)...",
+            self.unique_id,
+            "[-",
+        )
         yield from self.count_expr.generate_code()
-        yield from _yield_report("Finalizing code for RIGHT string method...", self.unique_id, ":])")
+        yield from _yield_report(
+            "Finalizing code for RIGHT string method...", self.unique_id, ":])"
+        )
 
     def __repr__(self):
         return f"RightStringMethodNode({self.string_expr}, {self.count_expr}, line {self.line})"
@@ -971,14 +1051,14 @@ class RightStringMethod(Expression):
 class LengthStringMethod(Expression):
     """Built-in LENGTH(string) string function.
 
-    ```BNF:
-        <primary> ::= 'LENGTH' '(' <expression> ')'
-```
-    Attributes:
-        string_expr (Expression): String expression.
+        ```BNF:
+            <primary> ::= 'LENGTH' '(' <expression> ')'
+    ```
+        Attributes:
+            string_expr (Expression): String expression.
 
-    Methods:
-        generate_code(...): Emits Python `len(s)`.
+        Methods:
+            generate_code(...): Emits Python `len(s)`.
     """
 
     def __init__(self, string_expr: Expression, line: int):
@@ -988,11 +1068,15 @@ class LengthStringMethod(Expression):
 
     def unindented_representation(self) -> str:
         return "LENGTH Method"
-    
+
     def generate_code(self, indent="") -> Generator[CodeGenerationReport, None, None]:
-        yield from _yield_report("Generating code for LENGTH string method...", self.unique_id, "(len(")
+        yield from _yield_report(
+            "Generating code for LENGTH string method...", self.unique_id, "(len("
+        )
         yield from self.string_expr.generate_code()
-        yield from _yield_report("Finalizing code for LENGTH string method...", self.unique_id, "))")
+        yield from _yield_report(
+            "Finalizing code for LENGTH string method...", self.unique_id, "))"
+        )
 
     def __repr__(self):
         return f"LengthStringMethodNode({self.string_expr}, line {self.line})"
@@ -1001,16 +1085,16 @@ class LengthStringMethod(Expression):
 class MidStringMethod(Expression):
     """Built-in MID(string, start, length) string function.
 
-    ```BNF:
-        <primary> ::= 'MID' '(' <expression> ',' <expression> ',' <expression> ')'
-```
-    Attributes:
-        string_expr (Expression): String expression.
-        start_expr (Expression): 1-based start index (CIE convention).
-        length_expr (Expression): Number of characters to take.
+        ```BNF:
+            <primary> ::= 'MID' '(' <expression> ',' <expression> ',' <expression> ')'
+    ```
+        Attributes:
+            string_expr (Expression): String expression.
+            start_expr (Expression): 1-based start index (CIE convention).
+            length_expr (Expression): Number of characters to take.
 
-    Methods:
-        generate_code(...): Emits a Python slice adjusting the 1-based start index.
+        Methods:
+            generate_code(...): Emits a Python slice adjusting the 1-based start index.
     """
 
     def __init__(
@@ -1028,17 +1112,33 @@ class MidStringMethod(Expression):
 
     def unindented_representation(self) -> str:
         return "MID Method"
-    
+
     def generate_code(self, indent="") -> Generator[CodeGenerationReport, None, None]:
-        yield from _yield_report("Generating code for MID string method...", self.unique_id, f"(")
+        yield from _yield_report(
+            "Generating code for MID string method...", self.unique_id, f"("
+        )
         yield from self.string_expr.generate_code()
-        yield from _yield_report("Generating code for MID string method (adding slice)...", self.unique_id, "[(")
+        yield from _yield_report(
+            "Generating code for MID string method (adding slice)...",
+            self.unique_id,
+            "[(",
+        )
         yield from self.start_expr.generate_code()
-        yield from _yield_report("Generating code for MID string method (adjusting start index)...", self.unique_id, " - 1):(")
+        yield from _yield_report(
+            "Generating code for MID string method (adjusting start index)...",
+            self.unique_id,
+            " - 1):(",
+        )
         yield from self.start_expr.generate_code()
-        yield from _yield_report("Generating code for MID string method (adding length)...", self.unique_id, "+")
+        yield from _yield_report(
+            "Generating code for MID string method (adding length)...",
+            self.unique_id,
+            "+",
+        )
         yield from self.length_expr.generate_code()
-        yield from _yield_report("Finalizing code for MID string method...", self.unique_id, " -1)])")
+        yield from _yield_report(
+            "Finalizing code for MID string method...", self.unique_id, " -1)])"
+        )
 
     def __repr__(self):
         return f"MidStringMethodNode({self.string_expr}, {self.start_expr}, {self.length_expr}, line {self.line})"
@@ -1047,17 +1147,17 @@ class MidStringMethod(Expression):
 class LowerStringMethod(Expression):
     """Built-in LCASE(x) function.
 
-    Project decision (diverges from CIE spec): accepts `CHAR` or `STRING` and returns
-    the same type as the argument.
+        Project decision (diverges from CIE spec): accepts `CHAR` or `STRING` and returns
+        the same type as the argument.
 
-    ```BNF:
-        <primary> ::= 'LCASE' '(' <expression> ')'
-```
-    Attributes:
-        string_expr (Expression): Character expression.
+        ```BNF:
+            <primary> ::= 'LCASE' '(' <expression> ')'
+    ```
+        Attributes:
+            string_expr (Expression): Character expression.
 
-    Methods:
-        generate_code(...): Emits Python `c.lower()`.
+        Methods:
+            generate_code(...): Emits Python `c.lower()`.
     """
 
     def __init__(self, string_expr: Expression, line: int):
@@ -1067,11 +1167,15 @@ class LowerStringMethod(Expression):
 
     def unindented_representation(self) -> str:
         return "LCASE Method"
-    
+
     def generate_code(self, indent="") -> Generator[CodeGenerationReport, None, None]:
-        yield from _yield_report("Generating code for LCASE string method...", self.unique_id, f"(")
+        yield from _yield_report(
+            "Generating code for LCASE string method...", self.unique_id, f"("
+        )
         yield from self.string_expr.generate_code()
-        yield from _yield_report("Finalizing code for LCASE string method...", self.unique_id, ".lower())")
+        yield from _yield_report(
+            "Finalizing code for LCASE string method...", self.unique_id, ".lower())"
+        )
 
     def __repr__(self):
         return f"LowerStringMethodNode({self.string_expr}, line {self.line})"
@@ -1080,17 +1184,17 @@ class LowerStringMethod(Expression):
 class UpperStringMethod(Expression):
     """Built-in UCASE(x) function.
 
-    Project decision (diverges from CIE spec): accepts `CHAR` or `STRING` and returns
-    the same type as the argument.
+        Project decision (diverges from CIE spec): accepts `CHAR` or `STRING` and returns
+        the same type as the argument.
 
-    ```BNF:
-        <primary> ::= 'UCASE' '(' <expression> ')'
-```
-    Attributes:
-        string_expr (Expression): Character expression.
+        ```BNF:
+            <primary> ::= 'UCASE' '(' <expression> ')'
+    ```
+        Attributes:
+            string_expr (Expression): Character expression.
 
-    Methods:
-        generate_code(...): Emits Python `c.upper()`.
+        Methods:
+            generate_code(...): Emits Python `c.upper()`.
     """
 
     def __init__(self, string_expr: Expression, line: int):
@@ -1100,11 +1204,15 @@ class UpperStringMethod(Expression):
 
     def unindented_representation(self) -> str:
         return "UCASE Method"
-    
+
     def generate_code(self, indent="") -> Generator[CodeGenerationReport, None, None]:
-        yield from _yield_report("Generating code for UCASE string method...", self.unique_id, f"(")
+        yield from _yield_report(
+            "Generating code for UCASE string method...", self.unique_id, f"("
+        )
         yield from self.string_expr.generate_code()
-        yield from _yield_report("Finalizing code for UCASE string method...", self.unique_id, ".upper())")
+        yield from _yield_report(
+            "Finalizing code for UCASE string method...", self.unique_id, ".upper())"
+        )
 
     def __repr__(self):
         return f"UpperStringMethodNode({self.string_expr}, line {self.line})"
@@ -1113,14 +1221,14 @@ class UpperStringMethod(Expression):
 class IntCastMethod(Expression):
     """Built-in INT(expr) cast function.
 
-    ```BNF:
-        <primary> ::= 'INT' '(' <expression> ')'
-```
-    Attributes:
-        expr (Expression): Expression to cast.
+        ```BNF:
+            <primary> ::= 'INT' '(' <expression> ')'
+    ```
+        Attributes:
+            expr (Expression): Expression to cast.
 
-    Methods:
-        generate_code(...): Emits Python `int(expr)`.
+        Methods:
+            generate_code(...): Emits Python `int(expr)`.
     """
 
     def __init__(self, expr: Expression, line: int):
@@ -1130,11 +1238,15 @@ class IntCastMethod(Expression):
 
     def unindented_representation(self) -> str:
         return "INT Cast Method"
-    
+
     def generate_code(self, indent="") -> Generator[CodeGenerationReport, None, None]:
-        yield from _yield_report("Generating code for INT cast method...", self.unique_id, f"(int(")
+        yield from _yield_report(
+            "Generating code for INT cast method...", self.unique_id, f"(int("
+        )
         yield from self.expr.generate_code()
-        yield from _yield_report("Finalizing code for INT cast method...", self.unique_id, "))")
+        yield from _yield_report(
+            "Finalizing code for INT cast method...", self.unique_id, "))"
+        )
 
     def __repr__(self):
         return f"IntCastMethodNode({self.expr}, line {self.line})"
@@ -1143,17 +1255,17 @@ class IntCastMethod(Expression):
 class RandomRealMethod(Expression):
     """Built-in RAND(high) random number function.
 
-    ```BNF:
-        <primary> ::= 'RAND' '(' <expression> ')'
-```
-    Attributes:
-        high_expr (Expression): High bound expression.
+        ```BNF:
+            <primary> ::= 'RAND' '(' <expression> ')'
+    ```
+        Attributes:
+            high_expr (Expression): High bound expression.
 
-    Methods:
-        generate_code(...): Emits Python `uniform(0, high)` (runtime helper).
+        Methods:
+            generate_code(...): Emits Python `uniform(0, high)` (runtime helper).
 
-    Notes:
-        The runtime header is expected to provide/import `uniform`.
+        Notes:
+            The runtime header is expected to provide/import `uniform`.
     """
 
     def __init__(self, high_expr: Expression, line: int):
@@ -1163,11 +1275,15 @@ class RandomRealMethod(Expression):
 
     def unindented_representation(self) -> str:
         return "RAND Method"
-    
+
     def generate_code(self, indent="") -> Generator[CodeGenerationReport, None, None]:
-        yield from _yield_report("Generating code for RAND method...", self.unique_id, f"(uniform(0, ")
+        yield from _yield_report(
+            "Generating code for RAND method...", self.unique_id, f"(uniform(0, "
+        )
         yield from self.high_expr.generate_code()
-        yield from _yield_report("Finalizing code for RAND method...", self.unique_id, "))")
+        yield from _yield_report(
+            "Finalizing code for RAND method...", self.unique_id, "))"
+        )
 
     def __repr__(self):
         return f"RandomRealMethodNode({self.high_expr}, line {self.line})"
@@ -1176,17 +1292,17 @@ class RandomRealMethod(Expression):
 class InputStatement(Statement):
     """INPUT statement.
 
-    ```BNF:
-        <input_stmt> ::= 'INPUT' IDENTIFIER
-```
-    Attributes:
-        variable (Variable): Target variable to assign input into.
+        ```BNF:
+            <input_stmt> ::= 'INPUT' IDENTIFIER
+    ```
+        Attributes:
+            variable (Variable): Target variable to assign input into.
 
-    Methods:
-        generate_code(...): Emits a call to `InputAndConvert()` (runtime helper).
+        Methods:
+            generate_code(...): Emits a call to `InputAndConvert()` (runtime helper).
 
-    Notes:
-        Prompt strings are not modeled here; the runtime helper handles conversion.
+        Notes:
+            Prompt strings are not modeled here; the runtime helper handles conversion.
     """
 
     def __init__(self, variable: Variable, line: int):
@@ -1196,9 +1312,13 @@ class InputStatement(Statement):
 
     def unindented_representation(self) -> str:
         return "Input Statement"
-    
+
     def generate_code(self, indent="") -> Generator[CodeGenerationReport, None, None]:
-        yield from _yield_report(f"Generating code for input statement: {self.variable.name}", self.unique_id, f"{indent}{self.variable.name} = InputAndConvert() #type: ignore to adapt CIE input function\n")
+        yield from _yield_report(
+            f"Generating code for input statement: {self.variable.name}",
+            self.unique_id,
+            f"{indent}{self.variable.name} = InputAndConvert() #type: ignore to adapt CIE input function\n",
+        )
 
     def __repr__(self):
         return f"InputStmtNode({self.variable}, line {self.line})"
@@ -1207,15 +1327,15 @@ class InputStatement(Statement):
 class OutputStatement(Statement):
     """OUTPUT statement.
 
-    ```BNF:
-        <output_stmt> ::= 'OUTPUT' <expression> (',' <expression>)*
-```
-    Attributes:
-        expressions (list[Expression]): Expressions to print in order.
+        ```BNF:
+            <output_stmt> ::= 'OUTPUT' <expression> (',' <expression>)*
+    ```
+        Attributes:
+            expressions (list[Expression]): Expressions to print in order.
 
-    Methods:
-        generate_code(...): Emits a Python `print(...)` that stringifies and concatenates
-            each expression to mimic CIE output concatenation.
+        Methods:
+            generate_code(...): Emits a Python `print(...)` that stringifies and concatenates
+                each expression to mimic CIE output concatenation.
     """
 
     def __init__(self, expressions: list[Expression], line: int):
@@ -1225,14 +1345,22 @@ class OutputStatement(Statement):
 
     def unindented_representation(self) -> str:
         return "Output Statement"
-    
+
     def generate_code(self, indent="") -> Generator[CodeGenerationReport, None, None]:
-        yield from _yield_report("Generating code for output statement...", self.unique_id, f"{indent}print(str(")
+        yield from _yield_report(
+            "Generating code for output statement...",
+            self.unique_id,
+            f"{indent}print(str(",
+        )
         for i, expr in enumerate(self.expressions):
             if i > 0:
-                yield from _yield_report(f"{MSG_OUTPUT_CONCAT}", self.unique_id, ") + str(")
+                yield from _yield_report(
+                    f"{MSG_OUTPUT_CONCAT}", self.unique_id, ") + str("
+                )
             yield from expr.generate_code()
-        yield from _yield_report("Finishing code for output statement...", self.unique_id, "))\n")
+        yield from _yield_report(
+            "Finishing code for output statement...", self.unique_id, "))\n"
+        )
 
     def __repr__(self):
         return f"OutputStmtNode({self.expressions}, line {self.line})"
@@ -1241,15 +1369,15 @@ class OutputStatement(Statement):
 class AssignmentStatement(Statement):
     """Assignment statement.
 
-    ```BNF:
-        <assignment> ::= <assignable> 'ASSIGN' <expression>
-```
-    Attributes:
-        variable (Assignable): Assignment target.
-        expression (Expression): Assigned value.
+        ```BNF:
+            <assignment> ::= <assignable> 'ASSIGN' <expression>
+    ```
+        Attributes:
+            variable (Assignable): Assignment target.
+            expression (Expression): Assigned value.
 
-    Methods:
-        generate_code(...): Emits `target = value` with a trailing newline.
+        Methods:
+            generate_code(...): Emits `target = value` with a trailing newline.
     """
 
     def __init__(
@@ -1267,15 +1395,25 @@ class AssignmentStatement(Statement):
 
     def unindented_representation(self) -> str:
         return "Assignment"
-    
+
     def generate_code(self, indent="") -> Generator[CodeGenerationReport, None, None]:
         var_repr = self.variable.unindented_representation()
         expr_repr = self.expression.unindented_representation()
-        yield from _yield_report(f"Generating code for assignment: {var_repr} = ...", self.unique_id, f"{indent}")
+        yield from _yield_report(
+            f"Generating code for assignment: {var_repr} = ...",
+            self.unique_id,
+            f"{indent}",
+        )
         yield from self.variable.generate_code()
-        yield from _yield_report(f"Generating code for assignment: ... = {expr_repr}", self.unique_id, " = ")
+        yield from _yield_report(
+            f"Generating code for assignment: ... = {expr_repr}", self.unique_id, " = "
+        )
         yield from self.expression.generate_code()
-        yield from _yield_report(f"Finishing code for assignment: {var_repr} = {expr_repr}", self.unique_id, "\n")
+        yield from _yield_report(
+            f"Finishing code for assignment: {var_repr} = {expr_repr}",
+            self.unique_id,
+            "\n",
+        )
 
     def __repr__(self):
         return f"AssignStmtNode({self.variable}, {self.expression}, line {self.line})"
@@ -1284,15 +1422,15 @@ class AssignmentStatement(Statement):
 class UnaryExpression(Expression):
     """Unary expression.
 
-    ```BNF:
-        <unary> ::= ('PLUS' | 'MINUS' | 'NOT') <unary> | <primary>
-```
-    Attributes:
-        operator (str): Operator token value (e.g., "MINUS", "NOT").
-        operand (Expression): Operand expression.
+        ```BNF:
+            <unary> ::= ('PLUS' | 'MINUS' | 'NOT') <unary> | <primary>
+    ```
+        Attributes:
+            operator (str): Operator token value (e.g., "MINUS", "NOT").
+            operand (Expression): Operand expression.
 
-    Methods:
-        generate_code(...): Emits a parenthesized unary expression using `operators_map`.
+        Methods:
+            generate_code(...): Emits a parenthesized unary expression using `operators_map`.
     """
 
     def __init__(self, operator: str, operand: Expression, line: int):
@@ -1303,11 +1441,19 @@ class UnaryExpression(Expression):
 
     def unindented_representation(self) -> str:
         return "Unary Expression: " + self.operator
-    
+
     def generate_code(self, indent="") -> Generator[CodeGenerationReport, None, None]:
-        yield from _yield_report(f"Generating code for unary expression: {self.operator} ...", self.unique_id, f"({operators_map[self.operator]} ")
+        yield from _yield_report(
+            f"Generating code for unary expression: {self.operator} ...",
+            self.unique_id,
+            f"({operators_map[self.operator]} ",
+        )
         yield from self.operand.generate_code()
-        yield from _yield_report(f"Finishing code for unary expression: {self.operator} ...", self.unique_id, ")")
+        yield from _yield_report(
+            f"Finishing code for unary expression: {self.operator} ...",
+            self.unique_id,
+            ")",
+        )
 
     def __repr__(self):
         return f"UnaryExprNode({self.operator}, {self.operand}, line {self.line})"
@@ -1316,21 +1462,21 @@ class UnaryExpression(Expression):
 class BinaryExpression(Expression):
     """Binary expression.
 
-    ```BNF:
-        <power> ::= <unary> ('POWER' <power>)?
-```        <multiplicative> ::= <power> (('MULTIPLY' | 'DIVIDE' | 'MOD' | 'DIV') <power>)*
-        <additive> ::= <multiplicative> (('PLUS' | 'MINUS' | 'AMPERSAND') <multiplicative>)*
-        <comparison> ::= <additive> (('EQ' | 'NEQ' | 'LT' | 'LTE' | 'GT' | 'GTE') <additive>)?
-        <logical_and> ::= <logical_not> ('AND' <logical_not>)*
-        <logical_or> ::= <logical_and> ('OR' <logical_and>)*
+        ```BNF:
+            <power> ::= <unary> ('POWER' <power>)?
+    ```        <multiplicative> ::= <power> (('MULTIPLY' | 'DIVIDE' | 'MOD' | 'DIV') <power>)*
+            <additive> ::= <multiplicative> (('PLUS' | 'MINUS' | 'AMPERSAND') <multiplicative>)*
+            <comparison> ::= <additive> (('EQ' | 'NEQ' | 'LT' | 'LTE' | 'GT' | 'GTE') <additive>)?
+            <logical_and> ::= <logical_not> ('AND' <logical_not>)*
+            <logical_or> ::= <logical_and> ('OR' <logical_and>)*
 
-    Attributes:
-        left (Expression): Left operand.
-        operator (str): Operator token value (mapped via `operators_map`).
-        right (Expression): Right operand.
+        Attributes:
+            left (Expression): Left operand.
+            operator (str): Operator token value (mapped via `operators_map`).
+            right (Expression): Right operand.
 
-    Methods:
-        generate_code(...): Emits a parenthesized infix expression.
+        Methods:
+            generate_code(...): Emits a parenthesized infix expression.
     """
 
     def __init__(self, left: Expression, operator: str, right: Expression, line: int):
@@ -1342,15 +1488,27 @@ class BinaryExpression(Expression):
 
     def unindented_representation(self) -> str:
         return "Binary Expression: " + self.operator
-    
+
     def generate_code(self, indent="") -> Generator[CodeGenerationReport, None, None]:
         left_repr = self.left.unindented_representation()
         right_repr = self.right.unindented_representation()
-        yield from _yield_report(f"Generating code for binary expression: ... {self.operator} ...", self.unique_id, f"(")
+        yield from _yield_report(
+            f"Generating code for binary expression: ... {self.operator} ...",
+            self.unique_id,
+            f"(",
+        )
         yield from self.left.generate_code()
-        yield from _yield_report(f"Generating code for binary expression: {left_repr} {self.operator} ...", self.unique_id, f" {operators_map[self.operator]} ")
+        yield from _yield_report(
+            f"Generating code for binary expression: {left_repr} {self.operator} ...",
+            self.unique_id,
+            f" {operators_map[self.operator]} ",
+        )
         yield from self.right.generate_code()
-        yield from _yield_report(f"Finishing code for binary expression: {left_repr} {self.operator} {right_repr}", self.unique_id, ")")
+        yield from _yield_report(
+            f"Finishing code for binary expression: {left_repr} {self.operator} {right_repr}",
+            self.unique_id,
+            ")",
+        )
 
     def __repr__(self):
         return f"BinaryExprNode({self.left}, {self.operator}, {self.right}, line {self.line})"
@@ -1359,17 +1517,17 @@ class BinaryExpression(Expression):
 class Condition(Expression):
     """Condition wrapper used by control-flow statements.
 
-    ```BNF:
-        <condition> ::= <expression>
-```
-    Attributes:
-        expression (Expression): Underlying condition expression.
+        ```BNF:
+            <condition> ::= <expression>
+    ```
+        Attributes:
+            expression (Expression): Underlying condition expression.
 
-    Methods:
-        generate_code(...): Delegates code generation to the underlying expression.
+        Methods:
+            generate_code(...): Delegates code generation to the underlying expression.
 
-    Notes:
-        This node exists mainly for clearer AST structure and UI display.
+        Notes:
+            This node exists mainly for clearer AST structure and UI display.
     """
 
     def __init__(self, expression: Expression, line: int):
@@ -1379,7 +1537,7 @@ class Condition(Expression):
 
     def unindented_representation(self) -> str:
         return "Condition"
-    
+
     def generate_code(self, indent="") -> Generator[CodeGenerationReport, None, None]:
         yield from self.expression.generate_code()
 
@@ -1390,19 +1548,19 @@ class Condition(Expression):
 class IfStatement(Statement):
     """IF/ELSE control-flow statement.
 
-    ```BNF:
-        <if_stmt> ::= 'IF' <condition> 'THEN' <statements> ('ELSE' <statements>)? 'ENDIF'
-```
-    Attributes:
-        condition (Condition): Condition to evaluate.
-        then_branch (Statements): Statements executed when condition is true.
-        else_branch (Statements | None): Optional statements executed when condition is false.
+        ```BNF:
+            <if_stmt> ::= 'IF' <condition> 'THEN' <statements> ('ELSE' <statements>)? 'ENDIF'
+    ```
+        Attributes:
+            condition (Condition): Condition to evaluate.
+            then_branch (Statements): Statements executed when condition is true.
+            else_branch (Statements | None): Optional statements executed when condition is false.
 
-    Methods:
-        generate_code(...): Emits a Python `if` statement with optional `else`.
+        Methods:
+            generate_code(...): Emits a Python `if` statement with optional `else`.
 
-    Notes:
-        Branch titles are used by the UI tree (Then Branch / Else Branch).
+        Notes:
+            Branch titles are used by the UI tree (Then Branch / Else Branch).
     """
 
     def __init__(
@@ -1424,7 +1582,7 @@ class IfStatement(Statement):
 
     def unindented_representation(self) -> str:
         return "If Statement:"
-    
+
     def generate_code(self, indent="") -> Generator[CodeGenerationReport, None, None]:
         yield from emit_if_statement(
             self.unique_id,
@@ -1441,23 +1599,25 @@ class IfStatement(Statement):
 class CaseStatement(Statement):
     """CASE statement (switch-like control flow).
 
-    ```BNF:
-        <case_stmt> ::= 'CASE' 'OF' IDENTIFIER <case_branch>* ('OTHERWISE' ':' <statements>)? 'ENDCASE'
-```        <case_branch> ::= <literal> ':' <statements>
+        ```BNF:
+            <case_stmt> ::= 'CASE' 'OF' IDENTIFIER <case_branch>* ('OTHERWISE' ':' <statements>)? 'ENDCASE'
+    ```        <case_branch> ::= <literal> ':' <statements>
 
-    Attributes:
-        variable (Variable): Variable being matched.
-        cases (dict[Literal | str, Statements]): Mapping from Literal keys to branch blocks.
-            The special key "OTHERWISE" holds the default branch when present.
+        Attributes:
+            variable (Variable): Variable being matched.
+            cases (dict[Literal | str, Statements]): Mapping from Literal keys to branch blocks.
+                The special key "OTHERWISE" holds the default branch when present.
 
-    Methods:
-        generate_code(...): Emits a Python `match` statement with `case` arms.
+        Methods:
+            generate_code(...): Emits a Python `match` statement with `case` arms.
 
-    Notes:
-        Branch titles (e.g., "Case: 3") are derived from `Literal.python_source()` for UI display.
+        Notes:
+            Branch titles (e.g., "Case: 3") are derived from `Literal.python_source()` for UI display.
     """
 
-    def __init__(self, variable: Variable, cases: dict[Literal | str, Statements], line: int):
+    def __init__(
+        self, variable: Variable, cases: dict[Literal | str, Statements], line: int
+    ):
         super().__init__(line)
         self.variable = variable
         self.cases = cases
@@ -1483,21 +1643,33 @@ class CaseStatement(Statement):
         return "Case Statement"
 
     def generate_code(self, indent="") -> Generator[CodeGenerationReport, None, None]:
-        yield from _yield_report("Generating code for case statement...", self.unique_id, f"{indent}match ")
+        yield from _yield_report(
+            "Generating code for case statement...", self.unique_id, f"{indent}match "
+        )
         yield from self.variable.generate_code()
-        yield from _yield_report("Generating code for case statement (cases)...", self.unique_id, f":\n")
+        yield from _yield_report(
+            "Generating code for case statement (cases)...", self.unique_id, f":\n"
+        )
         indent += "    "
         for key, statements in self.cases.items():
             if key != "OTHERWISE":
                 if isinstance(key, str):
                     raise ValueError("Invalid case key: expected Literal, got string.")
-                key_label = key.python_source() if isinstance(key, Literal) else str(key)
-                yield from _yield_report(f"{MSG_CASE_KEY} ({key_label})", self.unique_id, f"{indent}case ")
+                key_label = (
+                    key.python_source() if isinstance(key, Literal) else str(key)
+                )
+                yield from _yield_report(
+                    f"{MSG_CASE_KEY} ({key_label})", self.unique_id, f"{indent}case "
+                )
                 yield from key.generate_code()
-                yield from _yield_report(f"{MSG_CASE_BODY} ({key_label})", self.unique_id, f":\n")
+                yield from _yield_report(
+                    f"{MSG_CASE_BODY} ({key_label})", self.unique_id, f":\n"
+                )
                 yield from statements.generate_code(indent + "    ")
             else:
-                yield from _yield_report(f"{MSG_CASE_OTHERWISE}", self.unique_id, f"{indent}case _:\n")
+                yield from _yield_report(
+                    f"{MSG_CASE_OTHERWISE}", self.unique_id, f"{indent}case _:\n"
+                )
                 yield from statements.generate_code(indent + "    ")
 
     def __repr__(self):
@@ -1507,15 +1679,15 @@ class CaseStatement(Statement):
 class WhileStatement(Statement):
     """Pre-condition WHILE loop.
 
-    ```BNF:
-        <while_stmt> ::= 'WHILE' <condition> <statements> 'ENDWHILE'
-```
-    Attributes:
-        condition (Condition): Loop condition.
-        body (Statements): Loop body.
+        ```BNF:
+            <while_stmt> ::= 'WHILE' <condition> <statements> 'ENDWHILE'
+    ```
+        Attributes:
+            condition (Condition): Loop condition.
+            body (Statements): Loop body.
 
-    Methods:
-        generate_code(...): Emits a Python `while` loop.
+        Methods:
+            generate_code(...): Emits a Python `while` loop.
     """
 
     def __init__(self, condition: Condition, body: Statements, line: int):
@@ -1527,11 +1699,15 @@ class WhileStatement(Statement):
 
     def unindented_representation(self) -> str:
         return "While Statement"
-    
+
     def generate_code(self, indent="") -> Generator[CodeGenerationReport, None, None]:
-        yield from _yield_report("Generating code for while statement...", self.unique_id, f"{indent}while ")
+        yield from _yield_report(
+            "Generating code for while statement...", self.unique_id, f"{indent}while "
+        )
         yield from self.condition.generate_code()
-        yield from _yield_report("Generating code for while statement (body)...", self.unique_id, f":\n")
+        yield from _yield_report(
+            "Generating code for while statement (body)...", self.unique_id, f":\n"
+        )
         yield from self.body.generate_code(indent + "    ")
 
     def __repr__(self):
@@ -1541,17 +1717,17 @@ class WhileStatement(Statement):
 class ForStatement(Statement):
     """Count-controlled FOR loop.
 
-    ```BNF:
-        <for_stmt> ::= 'FOR' IDENTIFIER 'ASSIGN' <expression> 'TO' <expression>
-```                       <statements> 'NEXT' IDENTIFIER
+        ```BNF:
+            <for_stmt> ::= 'FOR' IDENTIFIER 'ASSIGN' <expression> 'TO' <expression>
+    ```                       <statements> 'NEXT' IDENTIFIER
 
-    Attributes:
-        loop_variable (Variable): Loop variable identifier.
-        bounds (Bounds): Start/end expressions.
-        body (Statements): Loop body.
+        Attributes:
+            loop_variable (Variable): Loop variable identifier.
+            bounds (Bounds): Start/end expressions.
+            body (Statements): Loop body.
 
-    Methods:
-        generate_code(...): Emits Python `for var in range(start, end + 1): ...`.
+        Methods:
+            generate_code(...): Emits Python `for var in range(start, end + 1): ...`.
     """
 
     def __init__(
@@ -1570,15 +1746,23 @@ class ForStatement(Statement):
 
     def unindented_representation(self) -> str:
         return "For Loop"
-    
+
     def generate_code(self, indent="") -> Generator[CodeGenerationReport, None, None]:
-        yield from _yield_report("Generating code for for loop...", self.unique_id, f"{indent}for ")
+        yield from _yield_report(
+            "Generating code for for loop...", self.unique_id, f"{indent}for "
+        )
         yield from self.loop_variable.generate_code()
-        yield from _yield_report("Generating code for for loop (bounds)...", self.unique_id, f" in range(")
+        yield from _yield_report(
+            "Generating code for for loop (bounds)...", self.unique_id, f" in range("
+        )
         yield from self.bounds.lower_bound.generate_code()
-        yield from _yield_report("Generating code for for loop (upper bound)...", self.unique_id, f", ")
+        yield from _yield_report(
+            "Generating code for for loop (upper bound)...", self.unique_id, f", "
+        )
         yield from self.bounds.upper_bound.generate_code()
-        yield from _yield_report("Generating code for for loop (body)...", self.unique_id, f" + 1):\n")
+        yield from _yield_report(
+            "Generating code for for loop (body)...", self.unique_id, f" + 1):\n"
+        )
         yield from self.body.generate_code(indent + "    ")
 
     def __repr__(self):
@@ -1588,18 +1772,18 @@ class ForStatement(Statement):
 class PostWhileStatement(Statement):
     """Post-condition REPEAT...UNTIL loop.
 
-    ```BNF:
-        <repeat_until_stmt> ::= 'REPEAT' <statements> 'UNTIL' <condition>
-```
-    Attributes:
-        body (Statements): Loop body.
-        condition (Condition): Termination condition.
+        ```BNF:
+            <repeat_until_stmt> ::= 'REPEAT' <statements> 'UNTIL' <condition>
+    ```
+        Attributes:
+            body (Statements): Loop body.
+            condition (Condition): Termination condition.
 
-    Methods:
-        generate_code(...): Emits a `while True:` loop with a conditional `break`.
+        Methods:
+            generate_code(...): Emits a `while True:` loop with a conditional `break`.
 
-    Notes:
-        Python has no native do-while construct; this node lowers into `while True`.
+        Notes:
+            Python has no native do-while construct; this node lowers into `while True`.
     """
 
     def __init__(self, condition: Condition, body: Statements, line: int):
@@ -1611,13 +1795,25 @@ class PostWhileStatement(Statement):
 
     def unindented_representation(self) -> str:
         return "Post-While Statement"
-    
+
     def generate_code(self, indent="") -> Generator[CodeGenerationReport, None, None]:
-        yield from _yield_report("Generating code for post-while statement...", self.unique_id, f"{indent}while True:\n")
+        yield from _yield_report(
+            "Generating code for post-while statement...",
+            self.unique_id,
+            f"{indent}while True:\n",
+        )
         yield from self.body.generate_code(indent + "    ")
-        yield from _yield_report("Generating code for post-while statement (condition)...", self.unique_id, f"\n{indent}    if ")
+        yield from _yield_report(
+            "Generating code for post-while statement (condition)...",
+            self.unique_id,
+            f"\n{indent}    if ",
+        )
         yield from self.condition.generate_code()
-        yield from _yield_report("Finalizing code for post-while statement...", self.unique_id, f":\n{indent}        break\n")
+        yield from _yield_report(
+            "Finalizing code for post-while statement...",
+            self.unique_id,
+            f":\n{indent}        break\n",
+        )
 
     def __repr__(self):
         return f"PostWhileStmtNode({self.condition}, {self.body}, line {self.line})"
@@ -1626,14 +1822,14 @@ class PostWhileStatement(Statement):
 class ReturnType(ASTNode):
     """Return type annotation for a function definition.
 
-    ```BNF:
-        <return_type> ::= <type>
-```
-    Attributes:
-        type_name (str): CIE type name.
+        ```BNF:
+            <return_type> ::= <type>
+    ```
+        Attributes:
+            type_name (str): CIE type name.
 
-    Methods:
-        generate_code(...): Emits the mapped Python type name.
+        Methods:
+            generate_code(...): Emits the mapped Python type name.
     """
 
     def __init__(self, type_name: str, line: int):
@@ -1642,9 +1838,13 @@ class ReturnType(ASTNode):
 
     def unindented_representation(self) -> str:
         return f"Return Type: {self.type_name}"
-    
+
     def generate_code(self, indent="") -> Generator[CodeGenerationReport, None, None]:
-        yield from _yield_report("Generating code for return type...", self.unique_id, CIE_TO_PYTHON_TYPE_MAP.get(self.type_name, self.type_name))
+        yield from _yield_report(
+            "Generating code for return type...",
+            self.unique_id,
+            CIE_TO_PYTHON_TYPE_MAP.get(self.type_name, self.type_name),
+        )
 
     def __repr__(self):
         return f"ReturnTypeNode({self.type_name}, line {self.line})"
@@ -1653,19 +1853,19 @@ class ReturnType(ASTNode):
 class Arguments(ASTNode):
     """Argument list used by function/procedure calls and definitions.
 
-    ```BNF:
-        <arg_list> ::= <expression> (',' <expression>)*
-```        <param_list> ::= <parameter> (',' <parameter>)*
+        ```BNF:
+            <arg_list> ::= <expression> (',' <expression>)*
+    ```        <param_list> ::= <parameter> (',' <parameter>)*
 
-    Attributes:
-        arguments (list[Argument | Expression]): Items in the list.
+        Attributes:
+            arguments (list[Argument | Expression]): Items in the list.
 
-    Methods:
-        generate_code(..., with_type: bool = False): Emits comma-separated arguments.
-        __iter__/__getitem__/__len__: Convenience wrappers enabling list-like iteration and indexing.
+        Methods:
+            generate_code(..., with_type: bool = False): Emits comma-separated arguments.
+            __iter__/__getitem__/__len__: Convenience wrappers enabling list-like iteration and indexing.
 
-    Notes:
-        This node exists to centralize comma insertion and label pluralization.
+        Notes:
+            This node exists to centralize comma insertion and label pluralization.
     """
 
     def __init__(self, arguments: list[Argument | Expression], line: int):
@@ -1675,9 +1875,11 @@ class Arguments(ASTNode):
 
     def unindented_representation(self) -> str:
         return f"Argument" + ("s" if len(self.arguments) > 1 else "")
-    
-    def generate_code(self, indent="", with_type=False) -> Generator[CodeGenerationReport, None, None]:
-        yield from emit_comma_separated_items(self.unique_id, self.arguments, with_type=with_type) #type: ignore
+
+    def generate_code(
+        self, indent="", with_type=False
+    ) -> Generator[CodeGenerationReport, None, None]:
+        yield from emit_comma_separated_items(self.unique_id, self.arguments, with_type=with_type)  # type: ignore
 
     def __repr__(self):
         return f"ArgumentNode({self.arguments}, line {self.line})"
@@ -1695,22 +1897,22 @@ class Arguments(ASTNode):
 class FunctionDefinition(Statement):
     """FUNCTION/PROCEDURE definition.
 
-    ```BNF:
-        <function_def> ::= ('FUNCTION' | 'PROCEDURE') IDENTIFIER '(' <param_list>? ')'
-```                           ('RETURNS' <type>)? <statements> ('ENDFUNCTION' | 'ENDPROCEDURE')
+        ```BNF:
+            <function_def> ::= ('FUNCTION' | 'PROCEDURE') IDENTIFIER '(' <param_list>? ')'
+    ```                           ('RETURNS' <type>)? <statements> ('ENDFUNCTION' | 'ENDPROCEDURE')
 
-    Attributes:
-        name (str): Function/procedure name.
-        parameters (Arguments): Parameter list (typed).
-        return_type (ReturnType | None): Return type (None for procedures).
-        body (Statements): Function/procedure body.
-        procedure (bool): True when parsed from `PROCEDURE`.
+        Attributes:
+            name (str): Function/procedure name.
+            parameters (Arguments): Parameter list (typed).
+            return_type (ReturnType | None): Return type (None for procedures).
+            body (Statements): Function/procedure body.
+            procedure (bool): True when parsed from `PROCEDURE`.
 
-    Methods:
-        generate_code(...): Emits a Python `def` including a return annotation.
+        Methods:
+            generate_code(...): Emits a Python `def` including a return annotation.
 
-    Notes:
-        Procedures compile to functions returning `None`.
+        Notes:
+            Procedures compile to functions returning `None`.
     """
 
     def __init__(
@@ -1724,7 +1926,7 @@ class FunctionDefinition(Statement):
     ):
         super().__init__(line)
         self.name = name
-        self.parameters = Arguments(parameters, line) #type: ignore
+        self.parameters = Arguments(parameters, line)  # type: ignore
         self.return_type = return_type if return_type else None
         self.body = body
         self.body.title = "Body"
@@ -1733,16 +1935,32 @@ class FunctionDefinition(Statement):
 
     def unindented_representation(self) -> str:
         return f"Function Definition: {self.name}"
-    
+
     def generate_code(self, indent="") -> Generator[CodeGenerationReport, None, None]:
-        yield from _yield_report(f"Generating code for function definition: {self.name}...", self.unique_id, f"{indent}def {self.name}(")
+        yield from _yield_report(
+            f"Generating code for function definition: {self.name}...",
+            self.unique_id,
+            f"{indent}def {self.name}(",
+        )
         yield from self.parameters.generate_code(with_type=True)
-        yield from _yield_report(f"Generating code for function definition: {self.name} (type)...", self.unique_id, f") -> ")
+        yield from _yield_report(
+            f"Generating code for function definition: {self.name} (type)...",
+            self.unique_id,
+            f") -> ",
+        )
         if self.return_type:
             yield from self.return_type.generate_code()
         else:
-            yield from _yield_report(f"Generating code for function definition: {self.name} (no return type)...", self.unique_id, "None")
-        yield from _yield_report(f"Generating code for function definition: {self.name} (body)...", self.unique_id, f":\n")
+            yield from _yield_report(
+                f"Generating code for function definition: {self.name} (no return type)...",
+                self.unique_id,
+                "None",
+            )
+        yield from _yield_report(
+            f"Generating code for function definition: {self.name} (body)...",
+            self.unique_id,
+            f":\n",
+        )
         yield from self.body.generate_code(indent + "    ")
 
     def __repr__(self):
@@ -1752,24 +1970,30 @@ class FunctionDefinition(Statement):
 class FunctionCall(Expression):
     """Function call expression (also used for procedure calls).
 
-    ```BNF:
-        <function_call> ::= IDENTIFIER '(' <arg_list>? ')'
-```        <procedure_call_stmt> ::= 'CALL' IDENTIFIER '(' <arg_list>? ')'
+        ```BNF:
+            <function_call> ::= IDENTIFIER '(' <arg_list>? ')'
+    ```        <procedure_call_stmt> ::= 'CALL' IDENTIFIER '(' <arg_list>? ')'
 
-    Attributes:
-        name (str): Callee identifier.
-        arguments (Arguments): Argument expressions.
-        is_procedure (bool): True when this call originated from a `CALL` statement.
+        Attributes:
+            name (str): Callee identifier.
+            arguments (Arguments): Argument expressions.
+            is_procedure (bool): True when this call originated from a `CALL` statement.
 
-    Methods:
-        generate_code(...): Emits `name(args...)`. If `is_procedure` is True, also emits
-            a trailing newline so the call behaves like a statement.
+        Methods:
+            generate_code(...): Emits `name(args...)`. If `is_procedure` is True, also emits
+                a trailing newline so the call behaves like a statement.
 
-    Notes:
-        The `CALL` keyword is consumed by the parser; it is not stored on this node.
+        Notes:
+            The `CALL` keyword is consumed by the parser; it is not stored on this node.
     """
 
-    def __init__(self, name: str, arguments: Arguments, line: int, is_procedure_call: bool = False):
+    def __init__(
+        self,
+        name: str,
+        arguments: Arguments,
+        line: int,
+        is_procedure_call: bool = False,
+    ):
         super().__init__(line)
         self.name = name
         self.arguments = arguments
@@ -1778,13 +2002,23 @@ class FunctionCall(Expression):
 
     def unindented_representation(self) -> str:
         return f"Function Call: {self.name}"
-    
+
     def generate_code(self, indent="") -> Generator[CodeGenerationReport, None, None]:
-        yield from _yield_report(f"Generating code for function call: {self.name}...", self.unique_id, f"{indent}{self.name}(")
+        yield from _yield_report(
+            f"Generating code for function call: {self.name}...",
+            self.unique_id,
+            f"{indent}{self.name}(",
+        )
         yield from self.arguments.generate_code()
-        yield from _yield_report(f"Finishing code for function call: {self.name}...", self.unique_id, ")")
+        yield from _yield_report(
+            f"Finishing code for function call: {self.name}...", self.unique_id, ")"
+        )
         if self.is_procedure:
-            yield from _yield_report(f"Adding line break for procedure: {self.name}...", self.unique_id, f"\n")
+            yield from _yield_report(
+                f"Adding line break for procedure: {self.name}...",
+                self.unique_id,
+                f"\n",
+            )
 
     def __repr__(self):
         return f"FunctionCallNode({self.name}, {self.arguments})"
@@ -1793,14 +2027,14 @@ class FunctionCall(Expression):
 class ReturnStatement(Statement):
     """RETURN statement.
 
-    ```BNF:
-        <return_stmt> ::= 'RETURN' <expression>
-```
-    Attributes:
-        expression (Expression): Returned expression.
+        ```BNF:
+            <return_stmt> ::= 'RETURN' <expression>
+    ```
+        Attributes:
+            expression (Expression): Returned expression.
 
-    Methods:
-        generate_code(...): Emits `return <expr>`.
+        Methods:
+            generate_code(...): Emits `return <expr>`.
     """
 
     def __init__(self, expression: Expression, line: int):
@@ -1810,11 +2044,17 @@ class ReturnStatement(Statement):
 
     def unindented_representation(self) -> str:
         return "Return Statement"
-    
+
     def generate_code(self, indent="") -> Generator[CodeGenerationReport, None, None]:
-        yield from _yield_report("Generating code for return statement...", self.unique_id, f"{indent}return ")
+        yield from _yield_report(
+            "Generating code for return statement...",
+            self.unique_id,
+            f"{indent}return ",
+        )
         yield from self.expression.generate_code()
-        yield from _yield_report("Finishing code for return statement...", self.unique_id, "\n")
+        yield from _yield_report(
+            "Finishing code for return statement...", self.unique_id, "\n"
+        )
 
     def __repr__(self):
         return f"ReturnStmtNode({self.expression})"
@@ -1823,18 +2063,18 @@ class ReturnStatement(Statement):
 class OpenFileStatement(Statement):
     """OPENFILE statement.
 
-    ```BNF:
-        <openfile_stmt> ::= 'OPENFILE' <expression> 'FOR' ('READ' | 'WRITE' | 'APPEND')
-```
-    Attributes:
-        filename (Expression): Filename/path expression.
-        mode (str): Mode token value (READ/WRITE/APPEND), normalized to Python modes in codegen.
+        ```BNF:
+            <openfile_stmt> ::= 'OPENFILE' <expression> 'FOR' ('READ' | 'WRITE' | 'APPEND')
+    ```
+        Attributes:
+            filename (Expression): Filename/path expression.
+            mode (str): Mode token value (READ/WRITE/APPEND), normalized to Python modes in codegen.
 
-    Methods:
-        generate_code(...): Emits runtime bookkeeping for open files.
+        Methods:
+            generate_code(...): Emits runtime bookkeeping for open files.
 
-    Notes:
-        The runtime header is expected to provide `CURRENT_OPEN_FILES`.
+        Notes:
+            The runtime header is expected to provide `CURRENT_OPEN_FILES`.
     """
 
     def __init__(self, filename: Expression, mode: str, line: int):
@@ -1845,13 +2085,21 @@ class OpenFileStatement(Statement):
 
     def unindented_representation(self) -> str:
         return "Open File Statement : " + self.mode
-    
+
     def generate_code(self, indent="") -> Generator[CodeGenerationReport, None, None]:
         mode_map = {"READ": "READ", "WRITE": "WRITE", "APPEND": "APPEND"}
         cie_mode = mode_map.get(self.mode.upper(), "READ")
-        yield from _yield_report("Generating code for open file statement...", self.unique_id, f"{indent}CIE_OpenFile(")
+        yield from _yield_report(
+            "Generating code for open file statement...",
+            self.unique_id,
+            f"{indent}CIE_OpenFile(",
+        )
         yield from self.filename.generate_code()
-        yield from _yield_report("Finalizing code for open file statement...", self.unique_id, f", '{cie_mode}')\n")
+        yield from _yield_report(
+            "Finalizing code for open file statement...",
+            self.unique_id,
+            f", '{cie_mode}')\n",
+        )
 
     def __repr__(self):
         return f"OpenFileStmtNode({self.filename}, mode={self.mode}, line {self.line})"
@@ -1860,15 +2108,15 @@ class OpenFileStatement(Statement):
 class ReadFileStatement(Statement):
     """READFILE statement.
 
-    ```BNF:
-        <readfile_stmt> ::= 'READFILE' <expression> ',' IDENTIFIER
-```
-    Attributes:
-        filename (Expression): Filename/path expression.
-        variable (Variable): Target variable.
+        ```BNF:
+            <readfile_stmt> ::= 'READFILE' <expression> ',' IDENTIFIER
+    ```
+        Attributes:
+            filename (Expression): Filename/path expression.
+            variable (Variable): Target variable.
 
-    Methods:
-        generate_code(...): Emits a `readline()` from the file handle stored in the runtime map.
+        Methods:
+            generate_code(...): Emits a `readline()` from the file handle stored in the runtime map.
     """
 
     def __init__(self, filename: Expression, variable: Variable, line: int):
@@ -1879,13 +2127,21 @@ class ReadFileStatement(Statement):
 
     def unindented_representation(self) -> str:
         return "Read File Statement"
-    
+
     def generate_code(self, indent="") -> Generator[CodeGenerationReport, None, None]:
-        yield from _yield_report("Generating code for read file statement...", self.unique_id, f"{indent}")
+        yield from _yield_report(
+            "Generating code for read file statement...", self.unique_id, f"{indent}"
+        )
         yield from self.variable.generate_code()
-        yield from _yield_report("Continuing code for read file statement...", self.unique_id, f" = CIE_ReadFile(")
+        yield from _yield_report(
+            "Continuing code for read file statement...",
+            self.unique_id,
+            f" = CIE_ReadFile(",
+        )
         yield from self.filename.generate_code()
-        yield from _yield_report("Finalizing code for read file statement...", self.unique_id, f")\n")
+        yield from _yield_report(
+            "Finalizing code for read file statement...", self.unique_id, f")\n"
+        )
 
     def __repr__(self):
         return f"ReadFileStmtNode({self.filename}, {self.variable}, line {self.line})"
@@ -1894,14 +2150,14 @@ class ReadFileStatement(Statement):
 class EOFStatement(Expression):
     """EOF(filename) built-in function.
 
-    ```BNF:
-        <primary> ::= 'EOF' '(' <expression> ')'
-```
-    Attributes:
-        filename (Expression): Filename/path expression.
+        ```BNF:
+            <primary> ::= 'EOF' '(' <expression> ')'
+    ```
+        Attributes:
+            filename (Expression): Filename/path expression.
 
-    Methods:
-        generate_code(...): Emits a call to the runtime helper `IsEndOfFile(...)`.
+        Methods:
+            generate_code(...): Emits a call to the runtime helper `IsEndOfFile(...)`.
     """
 
     def __init__(self, filename: Expression, line: int):
@@ -1911,30 +2167,34 @@ class EOFStatement(Expression):
 
     def unindented_representation(self) -> str:
         return "EOF Function"
-    
+
     def generate_code(self, indent="") -> Generator[CodeGenerationReport, None, None]:
-        yield from _yield_report("Generating code for EOF function...", self.unique_id, f"{indent}IsEndOfFile(")
+        yield from _yield_report(
+            "Generating code for EOF function...",
+            self.unique_id,
+            f"{indent}IsEndOfFile(",
+        )
         yield from self.filename.generate_code()
-        yield from _yield_report("Finalizing code for EOF function...", self.unique_id, ")")
+        yield from _yield_report(
+            "Finalizing code for EOF function...", self.unique_id, ")"
+        )
 
 
 class WriteFileStatement(Statement):
     """WRITEFILE statement.
 
-    ```BNF:
-        <writefile_stmt> ::= 'WRITEFILE' <expression> ',' <expression>
-```
-    Attributes:
-        filename (Expression): Filename/path expression.
-        expression (Expression): Data expression to write.
+        ```BNF:
+            <writefile_stmt> ::= 'WRITEFILE' <expression> ',' <expression>
+    ```
+        Attributes:
+            filename (Expression): Filename/path expression.
+            expression (Expression): Data expression to write.
 
-    Methods:
-        generate_code(...): Emits a `write(str(expr))` into the runtime file handle map.
+        Methods:
+            generate_code(...): Emits a `write(str(expr))` into the runtime file handle map.
     """
 
-    def __init__(
-        self, filename: Expression, expression: Expression, line: int
-    ):
+    def __init__(self, filename: Expression, expression: Expression, line: int):
         super().__init__(line)
         self.filename = filename
         self.expression = expression
@@ -1944,11 +2204,19 @@ class WriteFileStatement(Statement):
         return "Write File Statement"
 
     def generate_code(self, indent="") -> Generator[CodeGenerationReport, None, None]:
-        yield from _yield_report("Generating code for write file statement...", self.unique_id, f"{indent}CIE_WriteFile(")
+        yield from _yield_report(
+            "Generating code for write file statement...",
+            self.unique_id,
+            f"{indent}CIE_WriteFile(",
+        )
         yield from self.filename.generate_code()
-        yield from _yield_report("Continuing code for write file statement...", self.unique_id, f", ")
+        yield from _yield_report(
+            "Continuing code for write file statement...", self.unique_id, f", "
+        )
         yield from self.expression.generate_code()
-        yield from _yield_report("Finalizing code for write file statement...", self.unique_id, f")\n")
+        yield from _yield_report(
+            "Finalizing code for write file statement...", self.unique_id, f")\n"
+        )
 
     def __repr__(self):
         return (
@@ -1959,14 +2227,14 @@ class WriteFileStatement(Statement):
 class CloseFileStatement(Statement):
     """CLOSEFILE statement.
 
-    ```BNF:
-        <closefile_stmt> ::= 'CLOSEFILE' <expression>
-```
-    Attributes:
-        filename (Expression): Filename/path expression.
+        ```BNF:
+            <closefile_stmt> ::= 'CLOSEFILE' <expression>
+    ```
+        Attributes:
+            filename (Expression): Filename/path expression.
 
-    Methods:
-        generate_code(...): Closes the handle and removes it from the runtime open-file map.
+        Methods:
+            generate_code(...): Closes the handle and removes it from the runtime open-file map.
     """
 
     def __init__(self, filename: Expression, line: int):
@@ -1976,11 +2244,17 @@ class CloseFileStatement(Statement):
 
     def unindented_representation(self) -> str:
         return "Close File Statement"
-    
+
     def generate_code(self, indent="") -> Generator[CodeGenerationReport, None, None]:
-        yield from _yield_report("Generating code for close file statement...", self.unique_id, f"{indent}CIE_CloseFile(")
+        yield from _yield_report(
+            "Generating code for close file statement...",
+            self.unique_id,
+            f"{indent}CIE_CloseFile(",
+        )
         yield from self.filename.generate_code()
-        yield from _yield_report("Finalizing code for close file statement...", self.unique_id, f")\n")
+        yield from _yield_report(
+            "Finalizing code for close file statement...", self.unique_id, f")\n"
+        )
 
     def __repr__(self):
         return f"CloseFileStmtNode({self.filename}, line {self.line})"
@@ -1989,19 +2263,20 @@ class CloseFileStatement(Statement):
 class Statements(ASTNode):
     """Sequence of statements (block).
 
-    ```BNF:
-        <statements> ::= <statement>*
-```
-    Attributes:
-        statements (list[ASTNode]): Statement nodes in source order.
-        title (str): UI label for the block (e.g., "Body", "Then Branch").
+        ```BNF:
+            <statements> ::= <statement>*
+    ```
+        Attributes:
+            statements (list[ASTNode]): Statement nodes in source order.
+            title (str): UI label for the block (e.g., "Body", "Then Branch").
 
-    Methods:
-        generate_code(...): Delegates code generation to each statement in order.
+        Methods:
+            generate_code(...): Delegates code generation to each statement in order.
 
-    Notes:
-        This node is used for the global program as well as block-structured constructs.
+        Notes:
+            This node is used for the global program as well as block-structured constructs.
     """
+
     def __init__(self, statements: list[ASTNode], line: int = 0, title: str = "global"):
         super().__init__(line)
         self.statements = statements
@@ -2010,7 +2285,7 @@ class Statements(ASTNode):
 
     def unindented_representation(self) -> str:
         return f"{self.title}" if self.title else ""
-    
+
     def generate_code(self, indent="") -> Generator[CodeGenerationReport, None, None]:
         for stmt in self.statements:
             yield from stmt.generate_code(indent)

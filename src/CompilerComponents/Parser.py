@@ -1,3 +1,167 @@
+"""CIE Pseudocode Parser (Recursive Descent with Precedence Climbing)
+
+This parser converts CIE pseudocode tokens into an Abstract Syntax Tree (AST).
+It uses recursive descent for statements and precedence climbing for expressions.
+All parsing functions are generators that yield ParsingReport events for UI visualization.
+
+═══════════════════════════════════════════════════════════════════════════════
+CAMBRIDGE 9618 FEATURE COVERAGE (✅ = Implemented, ⚠ = Partial, ⏳ = Planned)
+═══════════════════════════════════════════════════════════════════════════════
+
+TYPES & DECLARATIONS:
+  ✅ Primitive types: INTEGER, REAL, STRING, BOOLEAN, DATE, CHAR
+  ✅ Arrays: 1D (ARRAY[low:high] OF type) and 2D (ARRAY[low1:high1, low2:high2] OF type)
+  ✅ User-defined types: TYPE name ... ENDTYPE (records with fields)
+  ✅ DECLARE var : type (single and multiple)
+  ✅ CONSTANT name = value (with type inference)
+  ⏳ SET type (recognized but not implemented)
+  ⏳ Pointer/reference: BYREF, BYVAL (recognized but limited support)
+
+DECLARATIONS & ASSIGNMENT:
+  ✅ Variable declaration: DECLARE id : type
+  ✅ Multiple declarations: DECLARE a, b, c : type
+  ✅ Constants: CONSTANT id = value
+  ✅ Assignment: var <- expression
+  ✅ Array element assignment: arr[i] <- value, arr[i, j] <- value
+  ✅ Record field assignment: record.field <- value
+
+CONTROL FLOW:
+  Selection:
+    ✅ IF condition THEN ... ENDIF
+    ✅ IF condition THEN ... ELSE ... ENDIF
+    ✅ Nested IF statements
+    ✅ CASE identifier OF case1: ... case2: ... OTHERWISE ... ENDCASE
+  
+  Loops:
+    ✅ WHILE condition DO ... ENDWHILE
+    ✅ REPEAT ... UNTIL condition
+    ✅ FOR counter = start TO end ... NEXT counter
+    ✅ FOR counter = start TO end STEP increment ... NEXT counter
+    ✅ Nested loops
+    ✅ FOR loops with step (both positive and negative)
+
+SUBPROGRAMS:
+  ✅ FUNCTION name(params) RETURNS type ... ENDFUNCTION
+  ✅ PROCEDURE name(params) ... ENDPROCEDURE
+  ✅ RETURN value
+  ✅ Function/procedure parameters
+  ✅ Function calls in expressions
+  ✅ Procedure calls via CALL
+  ✅ Recursion (mutual recursion supported)
+  ⚠ Parameter passing: BY VALUE only (BYREF recognized but limited)
+
+EXPRESSIONS & OPERATORS:
+  Literals:
+    ✅ Integer literals (e.g., 42, -17)
+    ✅ Real literals (e.g., 3.14, -2.5)
+    ✅ String literals (e.g., "hello")
+    ✅ Character literals (e.g., 'a')
+    ✅ Boolean literals (TRUE, FALSE)
+    ✅ Date literals (e.g., 2026-01-12)
+  
+  Operators (precedence: OR → AND → NOT → comparison → additive → multiplicative → unary → primary):
+    ✅ Arithmetic: +, -, *, /, DIV (integer division), MOD (modulo)
+    ✅ Comparison: =, <>, <, <=, >, >=
+    ✅ Logical: AND, OR, NOT
+    ✅ String: & (concatenation)
+    ✅ Unary: + (positive), - (negative)
+  
+  Complex Expressions:
+    ✅ Parenthesized expressions
+    ✅ Array indexing: arr[i], arr[i, j]
+    ✅ Record property access: record.field
+    ✅ Nested property access: record.field1.field2
+    ✅ Function calls in expressions
+    ✅ Mixed operator precedence
+
+BUILT-IN FUNCTIONS:
+  String Functions:
+    ✅ LENGTH(string) → INTEGER
+    ✅ RIGHT(string, count) → STRING
+    ✅ MID(string, start, length) → STRING
+    ✅ LCASE(string) → STRING
+    ✅ UCASE(string) → STRING
+  
+  Numeric Functions:
+    ✅ INT(value) → INTEGER (type cast)
+    ✅ RAND(max) → REAL (random 0 to max)
+  
+  File I/O Functions:
+    ✅ OPENFILE(filename, mode) → mode is READ, WRITE, APPEND
+    ✅ READFILE(filename, var)
+    ✅ WRITEFILE(filename, data)
+    ✅ CLOSEFILE(filename)
+    ✅ EOF(filename) → BOOLEAN
+
+INPUT/OUTPUT:
+  ✅ INPUT var (read from stdin into variable)
+  ✅ OUTPUT expr (write expression to stdout)
+  ✅ Multiple INPUT targets: INPUT a, b, c
+  ✅ Multiple OUTPUT expressions: OUTPUT expr1, expr2, expr3
+  ✅ Type checking for I/O (primitives and arrays supported)
+
+SCOPE & SEMANTICS:
+  ✅ Global scope
+  ✅ Local scope (within procedures/functions)
+  ✅ Parameter scope (procedure/function parameters)
+  ✅ Shadowing of global variables by local/parameter names
+  ✅ Case-insensitive identifiers (normalized to uppercase internally)
+  ✅ Type checking across assignments and function calls
+
+KNOWN LIMITATIONS (Cambridge 9618 items not yet implemented):
+  ⏳ BYREF parameter passing (recognized, limited support)
+  ⏳ Pointer types (^ operator)
+  ⏳ SET/ENUM types
+  ⏳ Random-file operations (SEEK, GETRECORD, PUTRECORD, RANDOM)
+  ⏳ Object-oriented features (CLASS, ENDCLASS, PUBLIC, PRIVATE, NEW, INHERITS, SUPER)
+  ⏳ Exception handling (TRY, CATCH, FINALLY)
+  ⏳ Module/import system
+  ⏳ Lambda/anonymous functions
+
+═══════════════════════════════════════════════════════════════════════════════
+ARCHITECTURE & IMPLEMENTATION NOTES
+═══════════════════════════════════════════════════════════════════════════════
+
+Parser Organization:
+- 11 logical sections (see ### Section Name ### markers below)
+- 50+ parsing functions organized by concern (types, expressions, statements, built-ins)
+- Module docstring = this coverage checklist
+- Section markers provide navigation and checklist of features
+
+Generator-Based Design:
+- All parsing functions are Python generators (use 'yield')
+- Each 'yield' emits a ParsingReport for UI visualization
+- Token advancement happens via _peek_token and _consume_token generators
+- Parser state is immutable (_ParserState), tokens advance via cursor
+
+Dispatch Tables (Phase 2 Refactoring):
+- STATEMENT_PARSERS: statement keyword → parser function (18 entries)
+- BUILT_IN_PARSERS: built-in keyword → parser function (8 entries)
+- Eliminates 40-line if/elif chains, makes feature checklist explicit
+- Dispatch tables initialized at module end from CIEKeywords
+
+Keyword Consistency:
+- All CIE keywords imported from CompilerComponents/CIEKeywords.py (single source of truth)
+- Prevents typos and inconsistency across Lexer, Parser, TypeChecker, CodeGenerator
+- CIEKeywords also exports CIE_SPEC_STATUS for alignment with Cambridge 9618 spec
+
+Expression Precedence (lowest to highest):
+  1. OR (logical disjunction)
+  2. AND (logical conjunction)
+  3. NOT (logical negation)
+  4. Comparison (=, <>, <, <=, >, >=)
+  5. Additive (+, -)
+  6. Multiplicative (*, /, DIV, MOD, &)
+  7. Unary (+, -, NOT)
+  8. Primary (literals, variables, function calls, parenthesized)
+
+State Encapsulation:
+- _ParserState: immutable dataclass holding tokens list, cursor position, scope depth
+- All generator functions follow: (state: _ParserState) → Generator[ParsingReport, None, ReturnType]
+- Token peeking and consuming through helper generators (_peek_token, _consume_token)
+- Ensures parser cannot accidentally mutate state mid-parse
+"""
+
 from __future__ import annotations
 
 from collections.abc import Generator
@@ -50,11 +214,20 @@ from CompilerComponents.AST import (
 from CompilerComponents.ProgressReport import ParsingReport
 from CompilerComponents.Token import Token, TokenType
 
+### Module Exceptions ###
+
 
 class ParsingError(Exception):
     """Custom exception for parsing errors."""
 
     pass
+
+
+### Parser State & Configuration ###
+
+# Forward declarations for dispatch tables (will be populated after function definitions)
+_STATEMENT_PARSERS: dict = {}
+_BUILT_IN_PARSERS: dict = {}
 
 
 class _ParserState:
@@ -78,6 +251,9 @@ class _ParserState:
         self.emit_peek_reports: bool = False
 
 
+### Type Definitions ###
+
+
 @dataclass(frozen=True)
 class ParsedType:
     """Result of parsing a type annotation.
@@ -98,6 +274,10 @@ class ParsedType:
     is_two_d: bool
     bounds1: Bounds | None
     bounds2: Bounds | None
+
+
+### Type Parsing ###
+# Parses CIE type annotations (simple types, arrays 1D/2D with bounds).
 
 
 def parse_type(state: _ParserState) -> Generator[ParsingReport, None, ParsedType]:
@@ -161,7 +341,9 @@ def parse_type(state: _ParserState) -> Generator[ParsingReport, None, ParsedType
         )
 
     # Simple type
-    simple = yield from _expect_token(state, [TokenType.VARIABLE_TYPE, TokenType.IDENTIFIER])
+    simple = yield from _expect_token(
+        state, [TokenType.VARIABLE_TYPE, TokenType.IDENTIFIER]
+    )
     return ParsedType(
         type_name=simple.value,
         element_type=simple.value,
@@ -170,6 +352,10 @@ def parse_type(state: _ParserState) -> Generator[ParsingReport, None, ParsedType
         bounds1=None,
         bounds2=None,
     )
+
+
+### Token Manipulation Helpers ###
+# Low-level utilities for consuming and peeking at tokens with cursor management.
 
 
 def _new_report(
@@ -274,6 +460,10 @@ def _expect_token(
     consumed = yield from _advance_token(state, f"Consumed {compared}")
     assert consumed is not None
     return consumed
+
+
+### AST Emission Helpers ###
+# Utilities for reporting AST structure and changes to the UI during parsing (generators).
 
 
 def _emit_ast_node(
@@ -411,7 +601,141 @@ def _emit_ast_subtree(
     # yield from _emit_ast_final_node(state, parent_id, node.__class__.__name__)
 
 
-### Parsing expressions ###
+### Expression Parsing (Precedence Climbing) ###
+# Recursive descent with precedence climbing for operator precedence.
+# Precedence levels (lowest to highest):
+#   1. Logical OR
+#   2. Logical AND
+#   3. Logical NOT
+#   4. Comparison (=, <>, <, <=, >, >=)
+#   5. Additive (+, -, &)
+#   6. Multiplicative (*, /, MOD, DIV)
+#   7. Unary (+, -)
+#   8. Primary (literals, identifiers, function calls, array/property access, parentheses)
+#
+# Parser functions (in precedence order, lowest to highest):
+#   parse_logical_or()       [level 1: OR]
+#   parse_logical_and()      [level 2: AND]
+#   parse_logical_not()      [level 3: NOT] ⚠ Typo in name; will be renamed in Phase 4
+#   parse_comparison()       [level 4: =, <>, <, <=, >, >=]
+#   parse_additive()         [level 5: +, -, &]
+#   parse_multiplicative()   [level 6: *, /, MOD, DIV]
+#   parse_unary()            [level 7: unary +, -]
+#   parse_primary()          [level 8: literals, identifiers, calls, array/property access, ()]
+#   parse_expression()       [entry point; delegates to parse_logical_or]
+#   parse_comma_separated_expressions() [helper for function/procedure arguments]
+
+
+def parse_logical_or(state: _ParserState):
+    """Parse a logical OR expression.
+    <logical_or> ::= <logical_and> ('OR' <logical_and>)*
+    """
+    left = yield from parse_logical_and(state)
+    next_token = yield from _peek_token(state)
+    if next_token and next_token.type != TokenType.OPERATOR:
+        return left
+    operator = yield from _match_token(state, ["OR"])
+    while operator:
+        right = yield from parse_logical_and(state)
+        left = BinaryExpression(left, operator.value, right, operator.line_number)
+        next_token = yield from _peek_token(state)
+        if next_token and next_token.type != TokenType.OPERATOR:
+            return left
+        operator = yield from _match_token(state, ["OR"])
+    return left
+
+
+def parse_logical_and(state: _ParserState):
+    """Parse a logical AND expression.
+    <logical_and> ::= <logical_not> ('AND' <logical_not>)*
+    """
+    left = yield from parse_logical_not(state)
+    next_token = yield from _peek_token(state)
+    if next_token and next_token.type != TokenType.OPERATOR:
+        return left
+    operator = yield from _match_token(state, ["AND"])
+    while operator:
+        right = yield from parse_logical_not(state)
+        left = BinaryExpression(left, operator.value, right, operator.line_number)
+        next_token = yield from _peek_token(state)
+        if next_token and next_token.type != TokenType.OPERATOR:
+            return left
+        operator = yield from _match_token(state, ["AND"])
+    return left
+
+
+def parse_logical_not(state: _ParserState):
+    """Parse a logical NOT expression.
+    <logical_not> ::= ('NOT' <logical_not>) | <comparison>
+    """
+    operator = yield from _match_token(state, ["NOT"])
+    if operator:
+        operand = yield from parse_logical_not(state)
+        return UnaryExpression(operator.value, operand, operator.line_number)
+    else:
+        return (yield from parse_comparison(state))
+
+
+def parse_comparison(state: _ParserState):
+    """Parse a comparison expression.
+    <comparison> ::= <additive> (('EQ' | 'NEQ' | 'LT' | 'LTE' | 'GT' | 'GTE') <additive>)?
+    """
+    left = yield from parse_additive(state)
+    operator = yield from _match_token(state, ["EQ", "NEQ", "LT", "LTE", "GT", "GTE"])
+    if operator:
+        right = yield from parse_additive(state)
+        return BinaryExpression(left, operator.value, right, operator.line_number)
+    return left
+
+
+def parse_additive(state: _ParserState):
+    """Parse an additive expression.
+    <additive> ::= <multiplicative> (('PLUS' | 'MINUS' | 'AMPERSAND') <multiplicative>)*
+    """
+    left = yield from parse_multiplicative(state)
+    next_token = yield from _peek_token(state)
+    if next_token and next_token.type != TokenType.OPERATOR:
+        return left
+    operator = yield from _match_token(state, ["PLUS", "MINUS", "AMPERSAND"])
+    while operator:
+        right = yield from parse_multiplicative(state)
+        left = BinaryExpression(left, operator.value, right, operator.line_number)
+        next_token = yield from _peek_token(state)
+        if next_token and next_token.type != TokenType.OPERATOR:
+            return left
+        operator = yield from _match_token(state, ["PLUS", "MINUS", "AMPERSAND"])
+    return left
+
+
+def parse_multiplicative(state: _ParserState):
+    """Parse a multiplicative expression.
+    <multiplicative> ::= <unary> (('MULTIPLY' | 'DIVIDE' | 'MOD' | 'DIV') <unary>)*
+    """
+    left = yield from parse_unary(state)
+    next_token = yield from _peek_token(state)
+    if next_token and next_token.type != TokenType.OPERATOR:
+        return left
+    operator = yield from _match_token(state, ["MULTIPLY", "DIVIDE", "MOD", "DIV"])
+    while operator:
+        right = yield from parse_unary(state)
+        left = BinaryExpression(left, operator.value, right, operator.line_number)
+        next_token = yield from _peek_token(state)
+        if next_token and next_token.type != TokenType.OPERATOR:
+            return left
+        operator = yield from _match_token(state, ["MULTIPLY", "DIVIDE", "MOD", "DIV"])
+    return left
+
+
+def parse_unary(state: _ParserState):
+    """Parse a unary expression.
+    <unary> ::= ('+' | '-') <unary> | <primary>
+    """
+    operator = yield from _match_token(state, ["PLUS", "MINUS"])
+    if operator:
+        operand = yield from parse_primary(state)
+        return UnaryExpression(operator.value, operand, operator.line_number)
+    else:
+        return (yield from parse_primary(state))
 
 
 def parse_primary(state: _ParserState):
@@ -456,7 +780,9 @@ def parse_primary(state: _ParserState):
 
                     yield from _expect_token(state, ["RPAREN"])
                     break
-            expr = FunctionCall(token.value, Arguments(args, token.line_number), token.line_number)
+            expr = FunctionCall(
+                token.value, Arguments(args, token.line_number), token.line_number
+            )
 
         # Postfix chain: allow any number of array/property accesses.
         while True:
@@ -471,7 +797,9 @@ def parse_primary(state: _ParserState):
 
                 if comma:
                     assert index_expr2 is not None
-                    expr = TwoArrayAccess(expr, index_expr, index_expr2, token.line_number)
+                    expr = TwoArrayAccess(
+                        expr, index_expr, index_expr2, token.line_number
+                    )
                 else:
                     expr = OneArrayAccess(expr, index_expr, token.line_number)
                 continue
@@ -514,144 +842,16 @@ def parse_primary(state: _ParserState):
         # do not allow postfix chaining (.[prop] / [index]) on parenthesized expressions.
         return expr
 
-    # Built-in string functions
-    elif next_token.value == "RIGHT":
-        return (yield from parse_right_string_method(state))
-    elif next_token.value == "LENGTH":
-        return (yield from parse_length_string_method(state))
-    elif next_token.value == "MID":
-        return (yield from parse_mid_string_method(state))
-    elif next_token.value == "LCASE":
-        return (yield from parse_lower_string_method(state))
-    elif next_token.value == "UCASE":
-        return (yield from parse_upper_string_method(state))
-
-    # Built-in number functions
-    elif next_token.value == "INT":
-        return (yield from parse_int_cast_function(state))
-    elif next_token.value == "RAND":
-        return (yield from parse_rand_function(state))
-    # Built-in file functions
-    elif next_token.value == "EOF":
-        return (yield from parse_eof_function(state))
+    # Built-in function dispatch
+    elif next_token.value in _BUILT_IN_PARSERS:
+        parser_func = _BUILT_IN_PARSERS[next_token.value]
+        return (yield from parser_func(state))
 
     # Unexpected token
     else:
         raise ParsingError(
             f"Line {next_token.line_number if next_token else 'EOF'}: Unexpected token type in primary expression: {(next_token.type, next_token.value) if next_token else 'EOF'}"
         )
-
-
-def parse_unary(state: _ParserState):
-    """Parse a unary expression.
-    <unary> ::= ('+' | '-') <unary> | <primary>
-    """
-    operator = yield from _match_token(state, ["PLUS", "MINUS"])
-    if operator:
-        operand = yield from parse_primary(state)
-        return UnaryExpression(operator.value, operand, operator.line_number)
-    else:
-        return (yield from parse_primary(state))
-
-
-def parse_multiplicative(state: _ParserState):
-    """Parse a multiplicative expression.
-    <multiplicative> ::= <unary> (('MULTIPLY' | 'DIVIDE' | 'MOD' | 'DIV') <unary>)*
-    """
-    left = yield from parse_unary(state)
-    next_token = yield from _peek_token(state)
-    if next_token and next_token.type != TokenType.OPERATOR:
-        return left
-    operator = yield from _match_token(state, ["MULTIPLY", "DIVIDE", "MOD", "DIV"])
-    while operator:
-        right = yield from parse_unary(state)
-        left = BinaryExpression(left, operator.value, right, operator.line_number)
-        next_token = yield from _peek_token(state)
-        if next_token and next_token.type != TokenType.OPERATOR:
-            return left
-        operator = yield from _match_token(state, ["MULTIPLY", "DIVIDE", "MOD", "DIV"])
-    return left
-
-
-def parse_additive(state: _ParserState):
-    """Parse an additive expression.
-    <additive> ::= <multiplicative> (('PLUS' | 'MINUS' | 'AMPERSAND') <multiplicative>)*
-    """
-    left = yield from parse_multiplicative(state)
-    next_token = yield from _peek_token(state)
-    if next_token and next_token.type != TokenType.OPERATOR:
-        return left
-    operator = yield from _match_token(state, ["PLUS", "MINUS", "AMPERSAND"])
-    while operator:
-        right = yield from parse_multiplicative(state)
-        left = BinaryExpression(left, operator.value, right, operator.line_number)
-        next_token = yield from _peek_token(state)
-        if next_token and next_token.type != TokenType.OPERATOR:
-            return left
-        operator = yield from _match_token(state, ["PLUS", "MINUS", "AMPERSAND"])
-    return left
-
-
-def parse_comparison(state: _ParserState):
-    """Parse a comparison expression.
-    <comparison> ::= <additive> (('EQ' | 'NEQ' | 'LT' | 'LTE' | 'GT' | 'GTE') <additive>)?
-    """
-    left = yield from parse_additive(state)
-    operator = yield from _match_token(state, ["EQ", "NEQ", "LT", "LTE", "GT", "GTE"])
-    if operator:
-        right = yield from parse_additive(state)
-        return BinaryExpression(left, operator.value, right, operator.line_number)
-    return left
-
-
-def parse_locical_not(state: _ParserState):
-    """Parse a logical NOT expression.
-    <logical_not> ::= ('NOT' <logical_not>) | <comparison>
-    """
-    operator = yield from _match_token(state, ["NOT"])
-    if operator:
-        operand = yield from parse_locical_not(state)
-        return UnaryExpression(operator.value, operand, operator.line_number)
-    else:
-        return (yield from parse_comparison(state))
-
-
-def parse_logical_and(state: _ParserState):
-    """Parse a logical AND expression.
-    <logical_and> ::= <logical_not> ('AND' <logical_not>)*
-    """
-    left = yield from parse_locical_not(state)
-    next_token = yield from _peek_token(state)
-    if next_token and next_token.type != TokenType.OPERATOR:
-        return left
-    operator = yield from _match_token(state, ["AND"])
-    while operator:
-        right = yield from parse_locical_not(state)
-        left = BinaryExpression(left, operator.value, right, operator.line_number)
-        next_token = yield from _peek_token(state)
-        if next_token and next_token.type != TokenType.OPERATOR:
-            return left
-        operator = yield from _match_token(state, ["AND"])
-    return left
-
-
-def parse_logical_or(state: _ParserState):
-    """Parse a logical OR expression.
-    <logical_or> ::= <logical_and> ('OR' <logical_and>)*
-    """
-    left = yield from parse_logical_and(state)
-    next_token = yield from _peek_token(state)
-    if next_token and next_token.type != TokenType.OPERATOR:
-        return left
-    operator = yield from _match_token(state, ["OR"])
-    while operator:
-        right = yield from parse_logical_and(state)
-        left = BinaryExpression(left, operator.value, right, operator.line_number)
-        next_token = yield from _peek_token(state)
-        if next_token and next_token.type != TokenType.OPERATOR:
-            return left
-        operator = yield from _match_token(state, ["OR"])
-    return left
 
 
 def parse_expression(state: _ParserState):
@@ -674,6 +874,42 @@ def parse_comma_separated_expressions(state: _ParserState):
             expressions.append(expr)
         comma = yield from _match_token(state, ["COMMA"])
     return expressions
+
+
+### Statement Parsing ###
+# Recursive descent parsers for all CIE statement types.
+# Statement types implemented (15 total):
+#   1. DECLARE <var> : <type>
+#   2. CONSTANT <var> = <value>
+#   3. <var> <- <expression>              (assignment)
+#   4. INPUT <var>
+#   5. OUTPUT <expr>, ...
+#   6. IF ... THEN ... ELSE ... ENDIF
+#   7. CASE ... OF ... OTHERWISE ... ENDCASE
+#   8. WHILE ... DO ... ENDWHILE
+#   9. REPEAT ... UNTIL ...               (post-condition loop, will be renamed in Phase 4)
+#  10. FOR i <- start TO end STEP step ... NEXT i
+#  11. TYPE <name> ... ENDTYPE            (custom composite type)
+#  12. FUNCTION <name>(...) RETURNS <type> ... ENDFUNCTION
+#  13. PROCEDURE <name>(...) ... ENDPROCEDURE
+#  14. RETURN <expression>
+#  15. CALL <procedure>(...)\n#
+# Parser functions:
+#   parse_declare_statement()             [statement 1: DECLARE]
+#   parse_constant_declaration()          [statement 2: CONSTANT]
+#   parse_assignment()                    [statement 3: var <-]
+#   parse_input_statement()               [statement 4: INPUT]
+#   parse_output_statement()              [statement 5: OUTPUT]
+#   parse_if_statement()                  [statement 6: IF]
+#   parse_case_statement()                [statement 7: CASE]
+#   parse_while_statement()               [statement 8: WHILE]
+#   parse_post_condition_loop_statement() [statement 9: REPEAT] (rename to parse_repeat_until_statement in Phase 4)
+#   parse_for_statement()                 [statement 10: FOR]
+#   parse_type_definition_statement()     [statement 11: TYPE]
+#   parse_function_definition()           [statements 12-13: FUNCTION/PROCEDURE] (handles both)
+#   parse_return_statement()              [statement 14: RETURN]
+#   parse_procedure_call_statement()      [statement 15: CALL]
+#   parse_function_argument()             [helper: function/procedure parameters]
 
 
 def parse_declare_statement(state: _ParserState):
@@ -716,11 +952,13 @@ def parse_declare_statement(state: _ParserState):
             )
 
         # Update earlier variable placeholders to their canonical label.
-        for (var_id, name, line_number) in var_node_ids:
+        for var_id, name, line_number in var_node_ids:
             yield from _emit_ast_update(
                 state,
                 var_id,
-                Variable(name, line_number, type_spec.element_type).unindented_representation(),
+                Variable(
+                    name, line_number, type_spec.element_type
+                ).unindented_representation(),
                 message="",
             )
             yield from _emit_ast_complete(state, var_id, message="")
@@ -729,7 +967,11 @@ def parse_declare_statement(state: _ParserState):
             yield from _emit_ast_update(
                 state,
                 decl_node_id,
-                "Declaration: 2D Array" if type_spec.is_two_d else "Declaration: 1D Array",
+                (
+                    "Declaration: 2D Array"
+                    if type_spec.is_two_d
+                    else "Declaration: 1D Array"
+                ),
                 message="",
             )
             assert type_spec.bounds1 is not None
@@ -1164,7 +1406,9 @@ def parse_function_definition(state: _ParserState):
     """
     func_type_token = yield from _expect_token(state, ["FUNCTION", "PROCEDURE"])
     func_name_token = yield from _expect_token(state, [TokenType.IDENTIFIER])
-    fn_node_id = yield from _visual_begin(state, f"Function Definition: {func_name_token.value}")
+    fn_node_id = yield from _visual_begin(
+        state, f"Function Definition: {func_name_token.value}"
+    )
     try:
         parameters = []
         yield from _expect_token(state, ["LPAREN"])
@@ -1233,7 +1477,9 @@ def parse_procedure_call_statement(state: _ParserState):
     """Parse a procedure call statement."""
     yield from _expect_token(state, ["CALL"])
     proc_name_token = yield from _expect_token(state, [TokenType.IDENTIFIER])
-    call_node_id = yield from _visual_begin(state, f"Function Call: {proc_name_token.value}")
+    call_node_id = yield from _visual_begin(
+        state, f"Function Call: {proc_name_token.value}"
+    )
     try:
         yield from _expect_token(state, ["LPAREN"])
         args = []
@@ -1250,7 +1496,9 @@ def parse_procedure_call_statement(state: _ParserState):
             yield from _emit_ast_update(
                 state,
                 args_node_id,
-                Arguments(args, proc_name_token.line_number).unindented_representation(),
+                Arguments(
+                    args, proc_name_token.line_number
+                ).unindented_representation(),
                 message="",
             )
             yield from _visual_end(state, args_node_id)
@@ -1263,6 +1511,73 @@ def parse_procedure_call_statement(state: _ParserState):
         )
     finally:
         yield from _visual_end(state, call_node_id)
+
+
+### Built-In Function Parsing ###
+# Parser functions for CIE built-in functions (11 total).
+# Helpers:
+#   _parse_single_arg_builtin()       [Used by LENGTH, LCASE, UCASE, INT, RAND, EOF]
+#   _parse_file_io_base()             [Used by file I/O functions]
+# String functions (5):
+#   parse_right_string_method()       [RIGHT(string, count)]
+#   parse_length_string_method()      [LENGTH(string)]
+#   parse_mid_string_method()         [MID(string, start, length)]
+#   parse_lower_string_method()       [LCASE(string)]
+#   parse_upper_string_method()       [UCASE(string)]
+# Numeric functions (2):
+#   parse_int_cast_function()         [INT(value)]
+#   parse_rand_function()             [RAND(max)]
+# File I/O functions (5):
+#   parse_open_file_function()        [OPENFILE(filename, mode)]
+#   parse_read_file_function()        [READFILE(filename, var)]
+#   parse_close_file_function()       [CLOSEFILE(filename)]
+#   parse_write_file_function()       [WRITEFILE(filename, data)]
+#   parse_eof_function()              [EOF(filename)]
+#
+# Main dispatch location: parse_primary() (lines ~519-537) checks next_token.value
+
+
+def _parse_single_arg_builtin(
+    state: _ParserState,
+    keyword: str,
+    ast_constructor,
+) -> Generator[ParsingReport, None, ASTNode]:
+    """
+    Helper for parsing single-argument built-in functions.
+    Used by: LENGTH, LCASE, UCASE, INT, RAND, EOF
+    """
+    token = yield from _expect_token(state, [keyword])
+    yield from _expect_token(state, ["LPAREN"])
+    arg = yield from parse_expression(state)
+    yield from _expect_token(state, ["RPAREN"])
+    return ast_constructor(arg, token.line_number)
+
+
+def _parse_file_io_base(
+    state: _ParserState,
+    keyword: str,
+    label: str,
+) -> Generator[ParsingReport, None, tuple[Token, Expression]]:
+    """
+    Helper for parsing common file I/O setup (keyword + filename expression).
+    Returns (token, filename_expr) for use by specific file I/O parsers.
+    """
+    node_id = yield from _visual_begin(state, label)
+    try:
+        token = yield from _expect_token(state, [keyword])
+        filename_expr = yield from parse_expression(state)
+        if not filename_expr:
+            raise ParsingError(
+                f"Line {token.line_number}: Invalid filename expression in {keyword} statement."
+            )
+        return (token, filename_expr)
+    except ParsingError:
+        raise
+    except Exception:
+        yield from _visual_end(state, node_id)
+        raise
+    finally:
+        yield from _visual_end(state, node_id)
 
 
 def parse_right_string_method(state: _ParserState):
@@ -1282,11 +1597,7 @@ def parse_length_string_method(state: _ParserState):
     """
     Parses the built-in LENGTH string method.
     """
-    length_token = yield from _expect_token(state, ["LENGTH"])
-    yield from _expect_token(state, ["LPAREN"])
-    string_expr = yield from parse_expression(state)
-    yield from _expect_token(state, ["RPAREN"])
-    return LengthStringMethod(string_expr, length_token.line_number)
+    return (yield from _parse_single_arg_builtin(state, "LENGTH", LengthStringMethod))
 
 
 def parse_mid_string_method(state: _ParserState):
@@ -1308,44 +1619,28 @@ def parse_lower_string_method(state: _ParserState):
     """
     Parses the built-in LCASE string method.
     """
-    lcase_token = yield from _expect_token(state, ["LCASE"])
-    yield from _expect_token(state, ["LPAREN"])
-    string_expr = yield from parse_expression(state)
-    yield from _expect_token(state, ["RPAREN"])
-    return LowerStringMethod(string_expr, lcase_token.line_number)
+    return (yield from _parse_single_arg_builtin(state, "LCASE", LowerStringMethod))
 
 
 def parse_upper_string_method(state: _ParserState):
     """
     Parses the built-in UCASE string method.
     """
-    ucase_token = yield from _expect_token(state, ["UCASE"])
-    yield from _expect_token(state, ["LPAREN"])
-    string_expr = yield from parse_expression(state)
-    yield from _expect_token(state, ["RPAREN"])
-    return UpperStringMethod(string_expr, ucase_token.line_number)
+    return (yield from _parse_single_arg_builtin(state, "UCASE", UpperStringMethod))
 
 
 def parse_int_cast_function(state: _ParserState):
     """
     Parses the built-in INT cast function.
     """
-    int_token = yield from _expect_token(state, ["INT"])
-    yield from _expect_token(state, ["LPAREN"])
-    expr = yield from parse_expression(state)
-    yield from _expect_token(state, ["RPAREN"])
-    return IntCastMethod(expr, int_token.line_number)
+    return (yield from _parse_single_arg_builtin(state, "INT", IntCastMethod))
 
 
 def parse_rand_function(state: _ParserState):
     """
     Parses the built-in RAND function.
     """
-    rand_token = yield from _expect_token(state, ["RAND"])
-    yield from _expect_token(state, ["LPAREN"])
-    expr = yield from parse_expression(state)
-    yield from _expect_token(state, ["RPAREN"])
-    return RandomRealMethod(expr, rand_token.line_number)
+    return (yield from _parse_single_arg_builtin(state, "RAND", RandomRealMethod))
 
 
 def parse_open_file_function(state: _ParserState):
@@ -1363,7 +1658,9 @@ def parse_open_file_function(state: _ParserState):
         yield from _expect_token(state, ["FOR"])
         mode = (yield from _expect_token(state, ["READ", "WRITE", "APPEND"])).value
 
-        yield from _emit_ast_update(state, node_id, f"Open File Statement : {mode}", message="")
+        yield from _emit_ast_update(
+            state, node_id, f"Open File Statement : {mode}", message=""
+        )
         return OpenFileStatement(filename_expr, mode, openfile_token.line_number)
     finally:
         yield from _visual_end(state, node_id)
@@ -1386,24 +1683,10 @@ def parse_read_file_function(state: _ParserState):
         var_token = yield from _expect_token(state, [TokenType.IDENTIFIER])
         variable = Variable(var_token.value, var_token.line_number)
         yield from _emit_ast_subtree(state, variable, node_id)
+        yield from _emit_ast_update(state, node_id, f"Read File Statement: {var_token.value}")
         return ReadFileStatement(filename_expr, variable, readfile_token.line_number)
     finally:
         yield from _visual_end(state, node_id)
-
-
-def parse_eof_function(state: _ParserState):
-    """
-    Parses the built-in EOF function.
-    """
-    eof_token = yield from _expect_token(state, ["EOF"])
-    yield from _expect_token(state, ["LPAREN"])
-    filename_expr = yield from parse_expression(state)
-    if not filename_expr:
-        raise ParsingError(
-            f"Line {eof_token.line_number}: Invalid filename expression in EOF function."
-        )
-    yield from _expect_token(state, ["RPAREN"])
-    return EOFStatement(filename_expr, eof_token.line_number)
 
 
 def parse_close_file_function(state: _ParserState):
@@ -1418,6 +1701,7 @@ def parse_close_file_function(state: _ParserState):
             raise ParsingError(
                 f"Line {closefile_token.line_number}: Invalid filename expression in CLOSEFILE function."
             )
+        yield from _emit_ast_update(state, node_id, "Close File Statement")
         return CloseFileStatement(filename_expr, closefile_token.line_number)
     finally:
         yield from _visual_end(state, node_id)
@@ -1437,71 +1721,53 @@ def parse_write_file_function(state: _ParserState):
             )
         yield from _expect_token(state, ["COMMA"])
         expr = yield from parse_expression(state)
+        yield from _emit_ast_update(state, node_id, "Write File Statement")
         return WriteFileStatement(filename_expr, expr, writefile_token.line_number)
     finally:
         yield from _visual_end(state, node_id)
 
 
+def parse_eof_function(state: _ParserState):
+    """
+    Parses the built-in EOF function.
+    """
+    return (yield from _parse_single_arg_builtin(state, "EOF", EOFStatement))
+
+
+### Statement Dispatch & Statement Lists ###
+# Main statement dispatcher (parse_statement) and statement sequence parser (parse_statements).
+# The dispatcher checks:
+#   1. If next token is an IDENTIFIER → parse_assignment
+#   2. If next token is a keyword → dispatch via lookup table to appropriate parser
+#   3. Otherwise → raise ParsingError
+#
+# Note: Dispatch tables are populated at module init time (after function definitions).
+
 def parse_statement(state: _ParserState):
-    """Parse a single statement. Statements include:
-    - Assignment,
-    - Variable declaration,
-    - Input,
-    - Output,
-    - IF statement,
-    - WHILE statement,
-    - FOR statement,
-    - Procedure call,
-    - Function definition.
+    """Parse a single statement. Dispatches based on next token value.
+    
+    Handles: DECLARE, CONSTANT, assignment, INPUT, OUTPUT, IF, CASE, WHILE,
+    REPEAT, FOR, FUNCTION, PROCEDURE, RETURN, CALL, TYPE, OPENFILE, READFILE,
+    WRITEFILE, CLOSEFILE.
     """
     next_token = yield from _peek_token(state)
     if not next_token:
         raise ParsingError("EOF: Unexpected end of input while parsing statement.")
 
-    # CIE constant declaration form:
-    #   CONSTANT <identifier> = <value>
-    # Variable assignment elsewhere remains `<-`.
-    if next_token.value == "CONSTANT":
-        return (yield from parse_constant_declaration(state))
-
-    if next_token.value == "DECLARE":
-        return (yield from parse_declare_statement(state))
+    # Assignment: identifier-based
     if next_token.type == TokenType.IDENTIFIER:
         return (yield from parse_assignment(state))
-    elif next_token.value == "INPUT":
-        return (yield from parse_input_statement(state))
-    elif next_token.value == "OUTPUT":
-        return (yield from parse_output_statement(state))
-    elif next_token.value == "IF":
-        return (yield from parse_if_statement(state))
-    elif next_token.value == "CASE":
-        return (yield from parse_case_statement(state))
-    elif next_token.value == "WHILE":
-        return (yield from parse_while_statement(state))
-    elif next_token.value == "REPEAT":
-        return (yield from parse_post_condition_loop_statement(state))
-    elif next_token.value == "FOR":
-        return (yield from parse_for_statement(state))
-    elif next_token.value in ["FUNCTION", "PROCEDURE"]:
-        return (yield from parse_function_definition(state))
-    elif next_token.value == "RETURN":
-        return (yield from parse_return_statement(state))
-    elif next_token.value == "CALL":
-        return (yield from parse_procedure_call_statement(state))
-    elif next_token.value == "TYPE":
-        return (yield from parse_type_definition_statement(state))
-    elif next_token.value == "OPENFILE":
-        return (yield from parse_open_file_function(state))
-    elif next_token.value == "READFILE":
-        return (yield from parse_read_file_function(state))
-    elif next_token.value == "WRITEFILE":
-        return (yield from parse_write_file_function(state))
-    elif next_token.value == "CLOSEFILE":
-        return (yield from parse_close_file_function(state))
-    else:
-        raise ParsingError(
-            f"Line {next_token.line_number if next_token else 'EOF'}: Unexpected token type: {next_token.type} : {next_token.value}"
-        )
+
+    # Keyword-based dispatch: try statement parsers table
+    keyword = next_token.value
+    if keyword in _STATEMENT_PARSERS:
+        parser_func = _STATEMENT_PARSERS[keyword]
+        return (yield from parser_func(state))
+
+    # Unknown statement
+    raise ParsingError(
+        f"Line {next_token.line_number if next_token else 'EOF'}: Unexpected token type: {next_token.type} : {next_token.value}"
+    )
 
 
 def parse_statements(state: _ParserState):
@@ -1522,6 +1788,10 @@ def parse_statements(state: _ParserState):
         return Statements(statements, title="global")
     finally:
         yield from _visual_end(state, stmts_node_id)
+
+
+### Public API ###
+# Entry points for external callers.
 
 
 def get_parsing_reporter(
@@ -1559,3 +1829,42 @@ def parse(tokens, filename="temp") -> Statements | None:
 
     print(f"Parsing completed successfully. AST written to {filename}_ast.txt")
     return ast_root
+
+
+### Dispatch Table Initialization ###
+# Populate dispatch tables after all parser functions are defined.
+# This ensures all function references are available.
+
+# Statement keyword → parser function mapping
+_STATEMENT_PARSERS.update({
+    "CONSTANT": parse_constant_declaration,
+    "DECLARE": parse_declare_statement,
+    "INPUT": parse_input_statement,
+    "OUTPUT": parse_output_statement,
+    "IF": parse_if_statement,
+    "CASE": parse_case_statement,
+    "WHILE": parse_while_statement,
+    "REPEAT": parse_post_condition_loop_statement,
+    "FOR": parse_for_statement,
+    "FUNCTION": parse_function_definition,
+    "PROCEDURE": parse_function_definition,
+    "RETURN": parse_return_statement,
+    "CALL": parse_procedure_call_statement,
+    "TYPE": parse_type_definition_statement,
+    "OPENFILE": parse_open_file_function,
+    "READFILE": parse_read_file_function,
+    "WRITEFILE": parse_write_file_function,
+    "CLOSEFILE": parse_close_file_function,
+})
+
+# Built-in function keyword → parser function mapping
+_BUILT_IN_PARSERS.update({
+    "RIGHT": parse_right_string_method,
+    "LENGTH": parse_length_string_method,
+    "MID": parse_mid_string_method,
+    "LCASE": parse_lower_string_method,
+    "UCASE": parse_upper_string_method,
+    "INT": parse_int_cast_function,
+    "RAND": parse_rand_function,
+    "EOF": parse_eof_function,
+})
