@@ -44,6 +44,14 @@ from CompilerComponents.AST import (
     WriteFileStatement,
 )
 from CompilerComponents.Types import ASTNodeId
+from typing import Protocol, runtime_checkable, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from CompilerComponents.TypeSystem import Type
+
+@runtime_checkable
+class HasElementType(Protocol):
+    element_type: "Type"
 
 ### Semantic Analysis Helper Functions ###
 
@@ -73,12 +81,30 @@ def _annotate_symbol_use(var_node: Variable, sym: Symbol) -> None:
         var_node.type = sym.data_type
     except Exception:
         pass
-    try:
-        var_node.static_type = parse_symbol_type(sym.data_type)
-    except Exception:
-        pass
+    var_node.static_type = _parse_type_str_to_static_type(sym.data_type)
     var_node.resolved_symbol = sym
     var_node.resolved_scope = sym.scope
+
+
+def _parse_type_str_to_static_type(type_str: str):
+    """Parse type string into static type object.
+    
+    Tries parse_symbol_type first, then parse_type_name as fallback.
+    Returns None if both fail.
+    
+    Args:
+        type_str: Type string to parse
+    
+    Returns:
+        Parsed type object or None
+    """
+    try:
+        return parse_symbol_type(type_str)
+    except Exception:
+        try:
+            return parse_type_name(type_str)
+        except Exception:
+            return None
 
 
 def _annotate_node_type(node: ASTNode, type_str: str) -> None:
@@ -88,13 +114,7 @@ def _annotate_node_type(node: ASTNode, type_str: str) -> None:
         node: AST node to annotate
         type_str: Type string (e.g., "INTEGER", "ARRAY[INTEGER]")
     """
-    try:
-        node.static_type = parse_symbol_type(type_str)
-    except Exception:
-        try:
-            node.static_type = parse_type_name(type_str)
-        except Exception:
-            pass
+    node.static_type = _parse_type_str_to_static_type(type_str)
 
 
 def _get_base_type(expr: ASTNode) -> str | None:
@@ -113,6 +133,31 @@ def _get_base_type(expr: ASTNode) -> str | None:
     return None
 
 
+def _extract_array_element_type(array_type_str: str) -> str | None:
+    """Extract element type from array type string.
+    
+    Args:
+        array_type_str: Type string like "ARRAY[INTEGER]" or "2D ARRAY[STRING]"
+    
+    Returns:
+        Element type string ("INTEGER", "STRING", etc.) or None if not an array
+    """
+    # Try using TypeSystem first
+    try:
+        from CompilerComponents.TypeSystem import type_to_string
+        parsed = _parse_type_str_to_static_type(array_type_str)
+        if parsed and isinstance(parsed, HasElementType):
+            return type_to_string(parsed.element_type)
+    except Exception:
+        pass
+    
+    # Fallback to string parsing
+    if array_type_str.startswith("ARRAY[") or array_type_str.startswith("2D ARRAY["):
+        return array_type_str.split("[", 1)[1].rsplit("]", 1)[0].strip()
+    
+    return None
+
+
 def _annotate_variable_declaration(
     var: Variable, sym: Symbol, type_str: str, scope: str
 ) -> None:
@@ -128,15 +173,84 @@ def _annotate_variable_declaration(
         var.type = type_str
     except Exception:
         pass
-    try:
-        var.static_type = parse_symbol_type(type_str)
-    except Exception:
-        try:
-            var.static_type = parse_type_name(type_str)
-        except Exception:
-            pass
+    var.static_type = _parse_type_str_to_static_type(type_str)
     var.resolved_symbol = sym
     var.resolved_scope = scope
+
+
+def _validate_property_access(
+    property_access: PropertyAccess,
+    sym_table: SymbolTable,
+    current_scope: str,
+    context_message: str = "Property access analysis."
+) -> Generator[SecondPassReport, None, None]:
+    """Validate property access and annotate nodes.
+    
+    Processes base expression, validates composite type and property exist,
+    and annotates nodes with type information.
+    
+    Args:
+        property_access: PropertyAccess AST node
+        sym_table: Symbol table for lookups
+        current_scope: Current scope name
+        context_message: Message prefix for reports
+    
+    Yields:
+        SecondPassReport for base expression processing and final result
+        On error, yields error report and returns
+    """
+    # Process the base variable/expression first
+    yield from get_second_pass_reporter(
+        property_access.variable, sym_table, property_access.line, current_scope
+    )
+
+    # Determine base type
+    base_type = _get_base_type(property_access.variable)
+    if not base_type:
+        yield from _yield_second_pass_report(
+            context_message,
+            node_id=property_access.unique_id,
+            error=SemanticError(
+                f"Line {property_access.line}: Semantic error: could not determine type of base expression in property access."
+            ),
+        )
+        return
+
+    composite_sym = sym_table.lookup(
+        base_type, property_access.line, context_scope=current_scope
+    )
+    if not composite_sym:
+        yield from _yield_second_pass_report(
+            context_message,
+            node_id=property_access.unique_id,
+            error=SemanticError(
+                f"Line {property_access.line}: Semantic error: no composite type '{base_type}' in scope '{current_scope}'."
+            ),
+        )
+        return
+
+    property_name = property_access.property.name
+    property_sym = sym_table.lookup_local(property_name, property_access.line, scope=base_type)
+    if not property_sym:
+        yield from _yield_second_pass_report(
+            context_message,
+            node_id=property_access.unique_id,
+            error=SemanticError(
+                f"Line {property_access.line}: Semantic error: property '{property_name}' not found in composite type '{base_type}'."
+            ),
+        )
+        return
+
+    # Annotate nodes with type information
+    if isinstance(property_access.property, Variable):
+        _annotate_symbol_use(property_access.property, property_sym)
+    _annotate_node_type(property_access, property_sym.data_type)
+
+    yield from _yield_second_pass_report(
+        f"Property '{property_name}' found in composite type '{base_type}'.",
+        node_id=property_access.unique_id,
+        looked_at_symbol=property_sym,
+    )
 
 
 ### Report Creation Helpers ###
@@ -358,7 +472,7 @@ def _handle_fp_function_definition(
             )
             return
 
-    params = [(param.name, param.arg_type) for param in ast_node.parameters]
+    params = [(param.name, param.param_type) for param in ast_node.parameters]
     sym = Symbol(
         func_name,
         func_line,
@@ -391,7 +505,7 @@ def _handle_fp_function_definition(
         sym = Symbol(
             param_name,
             param_line,
-            param.arg_type,
+            param.param_type,
             False,
             new_scope,
         )
@@ -406,7 +520,7 @@ def _handle_fp_function_definition(
             return
         try:
             if isinstance(param, Variable):
-                _annotate_variable_declaration(param, sym, param.arg_type, new_scope)
+                _annotate_variable_declaration(param, sym, param.param_type, new_scope)
         except Exception:
             pass
         yield from _yield_first_pass_report(
@@ -695,7 +809,7 @@ def _handle_sp_variable(
             f"Variable usage of '{var_name}'.",
             node_id=ast_node.unique_id,
             error=SemanticError(
-                f"Line {line}: Semantic error: no variable '{var_name}' in current scope '{current_scope}'."
+                f"Line {line}: Semantic error: no variable '{var_name}' in scope '{current_scope}'."
             ),
         )
         return
@@ -714,58 +828,7 @@ def _handle_sp_property_access(
     ast_node: PropertyAccess, sym_table: SymbolTable, line: int, current_scope: str
 ) -> Generator[SecondPassReport, None, None]:
     """Handler for property access (e.g., myType.field)."""
-    # Process the base variable/expression first
-    yield from get_second_pass_reporter(
-        ast_node.variable, sym_table, ast_node.line, current_scope
-    )
-
-    # Determine base type
-    base_type = _get_base_type(ast_node.variable)
-    if not base_type:
-        yield from _yield_second_pass_report(
-            "Property access analysis.",
-            node_id=ast_node.unique_id,
-            error=SemanticError(
-                f"Line {ast_node.line}: Semantic error: could not determine type of base expression in property access."
-            ),
-        )
-        return
-
-    composite_sym = sym_table.lookup(
-        base_type, ast_node.line, context_scope=current_scope
-    )
-    if not composite_sym:
-        yield from _yield_second_pass_report(
-            "Property access analysis.",
-            node_id=ast_node.unique_id,
-            error=SemanticError(
-                f"Line {ast_node.line}: Semantic error: composite type '{base_type}' not declared before use."
-            ),
-        )
-        return
-
-    property_name = ast_node.property.name
-    property_sym = sym_table.lookup_local(property_name, ast_node.line, scope=base_type)
-    if not property_sym:
-        yield from _yield_second_pass_report(
-            "Property access analysis.",
-            node_id=ast_node.unique_id,
-            error=SemanticError(
-                f"Line {ast_node.line}: Semantic error: property '{property_name}' not found in composite type '{base_type}'."
-            ),
-        )
-        return
-
-    # Annotate before yielding report (early annotation for UI/diagnostics)
-    if isinstance(ast_node.property, Variable):
-        _annotate_symbol_use(ast_node.property, property_sym)
-    _annotate_node_type(ast_node, property_sym.data_type)
-
-    yield from _yield_second_pass_report(
-        f"Property '{property_name}' found in composite type '{base_type}'.",
-        node_id=ast_node.unique_id,
-        looked_at_symbol=property_sym,
-    )
+    yield from _validate_property_access(ast_node, sym_table, current_scope)
 
 
 def _handle_sp_function_call(
@@ -1012,11 +1075,10 @@ def _handle_sp_one_array_access(
         sym = sym_table.lookup(
             ast_node.array.name, ast_node.line, context_scope=current_scope
         )
-        if sym and (
-            sym.data_type.startswith("ARRAY[") or sym.data_type.startswith("2D ARRAY[")
-        ):
-            inner = sym.data_type.split("[", 1)[1].rsplit("]", 1)[0].strip()
-            _annotate_node_type(ast_node, inner)
+        if sym:
+            element_type = _extract_array_element_type(sym.data_type)
+            if element_type:
+                _annotate_node_type(ast_node, element_type)
 
 
 def _handle_sp_two_array_access(
@@ -1037,11 +1099,10 @@ def _handle_sp_two_array_access(
         sym = sym_table.lookup(
             ast_node.array.name, ast_node.line, context_scope=current_scope
         )
-        if sym and (
-            sym.data_type.startswith("ARRAY[") or sym.data_type.startswith("2D ARRAY[")
-        ):
-            inner = sym.data_type.split("[", 1)[1].rsplit("]", 1)[0].strip()
-            _annotate_node_type(ast_node, inner)
+        if sym:
+            element_type = _extract_array_element_type(sym.data_type)
+            if element_type:
+                _annotate_node_type(ast_node, element_type)
 
 
 def _handle_sp_variable_declaration(
@@ -1064,7 +1125,7 @@ def _handle_sp_variable_declaration(
             f"Variable declaration of type '{ast_node.var_type}'.",
             node_id=ast_node.unique_id,
             error=SemanticError(
-                f"Line {ast_node.line}: Semantic error: data type '{ast_node.var_type}' not declared before use."
+                f"Line {ast_node.line}: Semantic error: no type '{ast_node.var_type}' in scope '{current_scope}'."
             ),
         )
         return
@@ -1096,7 +1157,7 @@ def _handle_sp_array_declaration(
             f"Array declaration of type '{ast_node.var_type}'.",
             node_id=ast_node.unique_id,
             error=SemanticError(
-                f"Line {ast_node.line}: Semantic error: data type '{ast_node.var_type}' not declared before use."
+                f"Line {ast_node.line}: Semantic error: no type '{ast_node.var_type}' in scope '{current_scope}'."
             ),
         )
         return
@@ -1128,7 +1189,7 @@ def _handle_sp_return_type(
             f"Return type '{ast_node.type_name}'.",
             node_id=ast_node.unique_id,
             error=SemanticError(
-                f"Line {ast_node.line}: Semantic error: return type '{ast_node.type_name}' not declared before use."
+                f"Line {ast_node.line}: Semantic error: no type '{ast_node.type_name}' in scope '{current_scope}'."
             ),
         )
         return
@@ -1356,76 +1417,22 @@ def _process_assignment_array_indices(
 
 
 def _process_assignment_property_access_impl(
-    ast_node: AssignmentStatement, sym_table: SymbolTable, current_scope: str
+    property_access: PropertyAccess,
+    rhs_expr: ASTNode,
+    line: int,
+    sym_table: SymbolTable,
+    current_scope: str,
 ) -> Generator[SecondPassReport, None, None]:
     """Inner generator for property access handling on assignment LHS."""
-
-    # Process the base variable/expression in the property access
-    yield from get_second_pass_reporter(
-        ast_node.variable.variable, sym_table, ast_node.line, current_scope
-    )
-
-    # Determine base type from the processed base expression
-    base_type = _get_base_type(ast_node.variable.variable)
-
-    report = SecondPassReport()
-    report.looked_at_tree_node_id = (
-        ast_node.variable.property.unique_id
-        if getattr(ast_node.variable, "property", None)
-        else ast_node.unique_id
-    )
-
-    if not base_type:
-        yield from _yield_second_pass_report(
-            "Could not determine base type.",
-            node_id=report.looked_at_tree_node_id,
-            error=SemanticError(
-                f"Line {ast_node.line}: Semantic error: could not determine type of base expression in property access."
-            ),
-        )
-        return
-
-    # Look up composite type
-    composite_sym = sym_table.lookup(
-        base_type, ast_node.line, context_scope=current_scope
-    )
-    if not composite_sym:
-        yield from _yield_second_pass_report(
-            f"Composite type '{base_type}' not found.",
-            node_id=report.looked_at_tree_node_id,
-            error=SemanticError(
-                f"Line {ast_node.line}: Semantic error: composite type '{base_type}' not declared before use."
-            ),
-        )
-        return
-
-    # Look up property in composite type
-    property_name = ast_node.variable.property.name
-    property_sym = sym_table.lookup_local(property_name, ast_node.line, scope=base_type)
-    if not property_sym:
-        yield from _yield_second_pass_report(
-            f"Property '{property_name}' not found.",
-            node_id=report.looked_at_tree_node_id,
-            error=SemanticError(
-                f"Line {ast_node.line}: Semantic error: property '{property_name}' not found in composite type '{base_type}'."
-            ),
-        )
-        return
-
-    # Annotate and report success
-    if isinstance(ast_node.variable.property, Variable):
-        _annotate_symbol_use(ast_node.variable.property, property_sym)
-    _annotate_node_type(ast_node.variable, property_sym.data_type)
-
-    yield from _yield_second_pass_report(
-        f"Property '{property_name}' found in composite type '{base_type}'.",
-        node_id=report.looked_at_tree_node_id,
-        looked_at_symbol=property_sym,
+    # Use unified property access validation
+    yield from _validate_property_access(
+        property_access, sym_table, current_scope,
+        context_message="Assignment to property."
     )
 
     # Process RHS expression after LHS property access checks are complete
     yield from get_second_pass_reporter(
-        ast_node.expression, sym_table, ast_node.line, current_scope
+        rhs_expr, sym_table, line, current_scope
     )
 
 
@@ -1440,7 +1447,13 @@ def _process_assignment_property_access_check(
     if not isinstance(ast_node.variable, PropertyAccess):
         return None
 
-    return _process_assignment_property_access_impl(ast_node, sym_table, current_scope)
+    return _process_assignment_property_access_impl(
+        ast_node.variable,
+        ast_node.expression,
+        ast_node.line,
+        sym_table,
+        current_scope,
+    )
 
 
 def _identify_assignment_lhs(
@@ -1603,7 +1616,7 @@ def _handle_sp_assignment(
             f"Variable '{name_check}' not declared.",
             node_id=focus_node_id,
             error=SemanticError(
-                f"Line {ast_node.line}: Semantic error: variable '{name_check}' not declared before use."
+                f"Line {ast_node.line}: Semantic error: no variable '{name_check}' in scope '{current_scope}'."
             ),
         )
         return

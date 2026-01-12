@@ -2,7 +2,7 @@
 // EXPECTED: invalid (type checker)
 // PENDING: kept under typechecker_planned until type checker is enforced
 
-DECLARE a : ARRAY[INTEGER]
+DECLARE a : ARRAY [1:10] OF INTEGER
 DECLARE i : REAL
 DECLARE x : INTEGER
 

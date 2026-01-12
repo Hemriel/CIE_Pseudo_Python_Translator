@@ -1,0 +1,13 @@
+// TEST: type mismatch in procedure call arguments
+// EXPECTED: invalid (one error)
+// FAILS IN: Semantic (type checking)
+// REASON: Procedure expects STRING but receives INTEGER
+
+PROCEDURE Greet(message : STRING)
+    OUTPUT "Message: ", message
+ENDPROCEDURE
+
+DECLARE count : INTEGER
+
+count <- 42
+CALL Greet(count)

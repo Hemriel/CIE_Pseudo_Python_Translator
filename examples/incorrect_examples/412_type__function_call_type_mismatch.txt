@@ -1,0 +1,14 @@
+// TEST: type mismatch in function call arguments
+// EXPECTED: invalid (one error)
+// FAILS IN: Semantic (type checking)
+// REASON: Function expects INTEGER but receives STRING
+
+FUNCTION Square(n : INTEGER) RETURNS INTEGER
+    RETURN n * n
+ENDFUNCTION
+
+DECLARE result : INTEGER
+DECLARE name : STRING
+
+name <- "hello"
+result <- Square(name)

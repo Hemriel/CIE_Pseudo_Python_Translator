@@ -54,11 +54,11 @@
     },
     "examples/incorrect_examples/300_sem__undeclared_variable_assignment.txt": {
       "expected_ok": false,
-      "message": "Line 6: Semantic error: variable 'x' not declared before use."
+      "message": "Line 6: Semantic error: no variable 'x' in scope 'global'."
     },
     "examples/incorrect_examples/301_sem__undeclared_variable_in_expression.txt": {
       "expected_ok": false,
-      "message": "Line 10: Semantic error: no variable 'x' in current scope 'global'."
+      "message": "Line 10: Semantic error: no variable 'x' in scope 'global'."
     },
     "examples/incorrect_examples/302_sem__double_declaration_same_scope.txt": {
       "expected_ok": false,
@@ -66,11 +66,11 @@
     },
     "examples/incorrect_examples/303_sem__unknown_data_type_in_declare.txt": {
       "expected_ok": false,
-      "message": "Line 6: Semantic error: data type 'person' not declared before use."
+      "message": "Line 6: Semantic error: no type 'person' in scope 'global'."
     },
     "examples/incorrect_examples/304_sem__unknown_return_type_in_function.txt": {
       "expected_ok": false,
-      "message": "Line 6: Semantic error: return type 'person' not declared before use."
+      "message": "Line 6: Semantic error: no type 'person' in scope 'f'."
     },
     "examples/incorrect_examples/305_sem__call_to_undeclared_subprogram.txt": {
       "expected_ok": false,
@@ -86,7 +86,7 @@
     },
     "examples/incorrect_examples/308_sem__property_access_on_non_composite.txt": {
       "expected_ok": false,
-      "message": "Line 7: Semantic error: composite type 'INTEGER' not declared before use."
+      "message": "Line 7: Semantic error: no composite type 'INTEGER' in scope 'global'."
     },
     "examples/incorrect_examples/309_sem__property_not_in_composite_assign.txt": {
       "expected_ok": false,
@@ -110,11 +110,47 @@
     },
     "examples/incorrect_examples/314_sem__scope_function_local_not_visible_globally.txt": {
       "expected_ok": false,
-      "message": "Line 17: Semantic error: no variable 'z' in current scope 'global'."
+      "message": "Line 17: Semantic error: no variable 'z' in scope 'global'."
     },
     "examples/incorrect_examples/315_sem__double_declaration_case_insensitive.txt": {
       "expected_ok": false,
       "message": "Line 7: Double declaration: variable 'x' is already declared in the current scope."
+    },
+    "examples/incorrect_examples/401_type__assign_real_to_integer.txt": {
+      "expected_ok": false,
+      "message": "Line 10: Semantic error: cannot assign REAL to INTEGER"
+    },
+    "examples/incorrect_examples/402_type__string_assign_char.txt": {
+      "expected_ok": false,
+      "message": "Line 10: Semantic error: cannot assign CHAR to STRING"
+    },
+    "examples/incorrect_examples/403_type__date_compare_string.txt": {
+      "expected_ok": false,
+      "message": "Line 12: Semantic error: DATE comparisons require DATE operands (got DATE and STRING)."
+    },
+    "examples/incorrect_examples/404_type__call_function_with_call.txt": {
+      "expected_ok": false,
+      "message": "Line 9: Semantic error: CALL must target a PROCEDURE (got function 'addone')."
+    },
+    "examples/incorrect_examples/405_type__procedure_used_in_expression.txt": {
+      "expected_ok": false,
+      "message": "Line 11: Semantic error: procedure 'p' cannot be used in an expression (no return value)."
+    },
+    "examples/incorrect_examples/406_type__function_missing_returns.txt": {
+      "expected_ok": false,
+      "message": "Line 7: Expected token RETURNS, but got ('RETURN', 'RETURN')"
+    },
+    "examples/incorrect_examples/407_type__return_in_procedure.txt": {
+      "expected_ok": false,
+      "message": "Line 6: Semantic error: procedures cannot contain RETURN statements"
+    },
+    "examples/incorrect_examples/408_type__readfile_into_non_string.txt": {
+      "expected_ok": false,
+      "message": "Line 8: Semantic error: READFILE target must be STRING (got INTEGER)"
+    },
+    "examples/incorrect_examples/409_type__array_index_real.txt": {
+      "expected_ok": false,
+      "message": "Line 11: Semantic error: array index must be INTEGER (got REAL)."
     },
     "examples/incorrect_examples/410_type__lcase_integer.txt": {
       "expected_ok": false,
@@ -123,8 +159,16 @@
     "examples/incorrect_examples/411_type__input_into_array.txt": {
       "expected_ok": false,
       "message": "Line 4: Semantic error: INPUT target must be a primitive type (got ARRAY[INTEGER])"
+    },
+    "examples/incorrect_examples/412_type__function_call_type_mismatch.txt": {
+      "expected_ok": false,
+      "message": "Line 14: Semantic error: argument type mismatch for 'square' (expected INTEGER, got STRING)."
+    },
+    "examples/incorrect_examples/413_type__procedure_call_type_mismatch.txt": {
+      "expected_ok": false,
+      "message": "Line 13: Semantic error: argument type mismatch for 'greet' (expected STRING, got INTEGER)."
     }
   },
-  "generated_at": "2026-01-12T09:35:39Z",
+  "generated_at": "2026-01-12T12:52:07Z",
   "schema_version": 1
 }

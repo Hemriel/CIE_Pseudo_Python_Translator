@@ -169,11 +169,10 @@ from dataclasses import dataclass
 
 from CompilerComponents.AST import (
     ASTNode,
-    Argument,
-    Arguments,
     AssignmentStatement,
     BinaryExpression,
     Bounds,
+    CallArguments,
     CaseStatement,
     CloseFileStatement,
     CompositeDataType,
@@ -194,6 +193,8 @@ from CompilerComponents.AST import (
     OneArrayDeclaration,
     OpenFileStatement,
     OutputStatement,
+    Parameter,
+    Parameters,
     PostWhileStatement,
     PropertyAccess,
     RandomRealMethod,
@@ -781,7 +782,7 @@ def parse_primary(state: _ParserState):
                     yield from _expect_token(state, ["RPAREN"])
                     break
             expr = FunctionCall(
-                token.value, Arguments(args, token.line_number), token.line_number
+                token.value, CallArguments(args, token.line_number), token.line_number
             )
 
         # Postfix chain: allow any number of array/property accesses.
@@ -1382,11 +1383,11 @@ def parse_type_definition_statement(state: _ParserState):
 
 
 def parse_function_argument(state: _ParserState):
-    """Parse a function argument (used in function definitions)."""
+    """Parse a function parameter (used in function definitions)."""
     param_token = yield from _expect_token(state, [TokenType.IDENTIFIER])
     yield from _expect_token(state, ["COLON"])
     param_type = yield from parse_type(state)
-    return Argument(param_token.value, param_type.type_name, param_token.line_number)
+    return Parameter(param_token.value, param_type.type_name, param_token.line_number)
 
 
 def parse_return_statement(state: _ParserState):
@@ -1496,7 +1497,7 @@ def parse_procedure_call_statement(state: _ParserState):
             yield from _emit_ast_update(
                 state,
                 args_node_id,
-                Arguments(
+                CallArguments(
                     args, proc_name_token.line_number
                 ).unindented_representation(),
                 message="",
@@ -1505,7 +1506,7 @@ def parse_procedure_call_statement(state: _ParserState):
         yield from _expect_token(state, ["RPAREN"])
         return FunctionCall(
             proc_name_token.value,
-            Arguments(args, proc_name_token.line_number),
+            CallArguments(args, proc_name_token.line_number),
             proc_name_token.line_number,
             is_procedure_call=True,
         )

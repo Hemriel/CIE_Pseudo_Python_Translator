@@ -1,0 +1,56 @@
+// TEST: function calls with expressions as arguments
+// EXPECTED: valid
+// BEHAVIOR_CAPTURED_BY_OUTPUT: functions accept expressions (not just variables) as arguments
+
+FUNCTION Add(x : INTEGER, y : INTEGER) RETURNS INTEGER
+    RETURN x + y
+ENDFUNCTION
+
+FUNCTION Multiply(a : INTEGER, b : INTEGER) RETURNS INTEGER
+    RETURN a * b
+ENDFUNCTION
+
+FUNCTION Max(x : INTEGER, y : INTEGER) RETURNS INTEGER
+    IF x > y THEN
+        RETURN x
+    ELSE
+        RETURN y
+    ENDIF
+ENDFUNCTION
+
+DECLARE n : INTEGER
+DECLARE m : INTEGER
+DECLARE result : INTEGER
+
+OUTPUT "===== Function Calls with Expressions Test ====="
+OUTPUT ""
+
+n <- 5
+m <- 3
+
+// Pass arithmetic expressions
+result <- Add(10 + 5, 20 - 3)
+OUTPUT "Add(10 + 5, 20 - 3) = ", result
+
+// Pass function calls as arguments
+result <- Add(Multiply(2, 3), Multiply(4, 5))
+OUTPUT "Add(Multiply(2, 3), Multiply(4, 5)) = ", result
+
+// Pass mixed: variables, literals, expressions
+result <- Max(n * 2, m + 7)
+OUTPUT "Max(n * 2, m + 7) where n=5, m=3: ", result
+
+// Nested function calls with expressions
+result <- Multiply(Add(n, m), Max(10, 15))
+OUTPUT "Multiply(Add(n, m), Max(10, 15)) = ", result
+
+// Complex expression: (a + b) * (max of two products)
+result <- Multiply(Add(n, m), Max(Multiply(2, 3), Multiply(4, 2)))
+OUTPUT "Multiply(Add(5, 3), Max(Multiply(2, 3), Multiply(4, 2))) = ", result
+
+// Literals in expressions
+result <- Add(100 + n * 10, 200 - m * 20)
+OUTPUT "Add(100 + n * 10, 200 - m * 20) = ", result
+
+OUTPUT ""
+OUTPUT "===== Function Calls with Expressions Test Complete ====="

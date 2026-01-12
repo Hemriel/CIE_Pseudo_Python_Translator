@@ -234,15 +234,13 @@ def emit_if_statement(
 
 def emit_comma_separated_items(
     node_id: ASTNodeId | None,
-    items: list[ASTNode],
-    **kwargs: Any,
+    items: list[ASTNode] | list[Expression] | list[Parameter],
 ) -> Generator[CodeGenerationReport, None, None]:
     """Emit a comma-separated list of items.
 
     Args:
         node_id: UI tree node id for reports.
         items: List of nodes to emit with commas between them.
-        **kwargs: Additional keyword arguments (e.g., with_type for Arguments).
 
     Yields:
         CodeGenerationReport events for each item and comma.
@@ -250,11 +248,7 @@ def emit_comma_separated_items(
     for i, item in enumerate(items):
         if i > 0:
             yield from _create_report("Adding separator...", node_id, ", ")
-        # Check if item supports with_type (for Arguments/parameters)
-        if isinstance(item, Argument):
-            yield from item.generate_code(with_type=kwargs.get("with_type", False))
-        else:
-            yield from item.generate_code()
+        yield from item.generate_code()
 
 
 class ASTNode:
@@ -554,41 +548,43 @@ class Variable(Expression, Assignable):
         return f"VariableNode({self.name})"
 
 
-class Argument(Expression):
-    """Typed argument used in function/procedure definitions.
+class Parameter(Expression):
+    """Typed parameter in function/procedure signature.
 
-        ```BNF:
-            <parameter> ::= IDENTIFIER ':' <type>
-    ```
-        Attributes:
-            name (str): Parameter identifier.
-            arg_type (str): CIE type name for the parameter.
+    Used in: FUNCTION/PROCEDURE definitions
+    Example: x: INTEGER in `FUNCTION Add(x: INTEGER, y: INTEGER)`
 
-        Methods:
-            generate_code(indent: str = "", with_type: bool = False) -> Generator[CodeGenerationReport, None, None]:
-                Generate the parameter name, optionally with a Python type annotation.
+    Attributes:
+        name (str): Parameter identifier.
+        param_type (str): CIE type name for the parameter.
+
+    Methods:
+        generate_code(indent: str = "") -> Generator[CodeGenerationReport, None, None]:
+            Generate the parameter with Python type annotation (always includes type).
+
+    Notes:
+        This replaces Argument for declaration contexts. No with_type parameter needed.
     """
 
-    def __init__(self, name: str, arg_type: str, line: int):
+    def __init__(self, name: str, param_type: str, line: int):
         super().__init__(line)
         self.name = name
-        self.arg_type = arg_type
+        self.param_type = param_type
 
     def unindented_representation(self) -> str:
-        return f"Argument: {self.name} : {self.arg_type}"
+        return f"Parameter: {self.name} : {self.param_type}"
 
-    def generate_code(
-        self, indent="", with_type=False
-    ) -> Generator[CodeGenerationReport, None, None]:
+    def generate_code(self, indent="") -> Generator[CodeGenerationReport, None, None]:
+        # Always emit type annotation (no with_type parameter needed)
         code = self.name
-        if with_type and self.arg_type != "unknown" and "ARRAY" not in self.arg_type:
-            code += f": {CIE_TO_PYTHON_TYPE_MAP.get(self.arg_type, self.arg_type)}"
+        if self.param_type != "unknown" and "ARRAY" not in self.param_type:
+            code += f": {CIE_TO_PYTHON_TYPE_MAP.get(self.param_type, self.param_type)}"
         yield from _yield_report(
-            f"Generating code for argument: {self.name}", self.unique_id, code
+            f"Generating code for parameter: {self.name}", self.unique_id, code
         )
 
     def __repr__(self):
-        return f"ArgumentNode({self.name}, {self.arg_type})"
+        return f"ParameterNode({self.name}, {self.param_type})"
 
 
 class VariableDeclaration(Statement):
@@ -1850,25 +1846,67 @@ class ReturnType(ASTNode):
         return f"ReturnTypeNode({self.type_name}, line {self.line})"
 
 
-class Arguments(ASTNode):
-    """Argument list used by function/procedure calls and definitions.
+class Parameters(ASTNode):
+    """Parameter list for function/procedure definitions.
 
-        ```BNF:
-            <arg_list> ::= <expression> (',' <expression>)*
-    ```        <param_list> ::= <parameter> (',' <parameter>)*
+    Used in: FUNCTION/PROCEDURE definitions
+    Contains: list[Parameter]
 
-        Attributes:
-            arguments (list[Argument | Expression]): Items in the list.
+    Attributes:
+        parameters (list[Parameter]): Typed parameters in the signature.
 
-        Methods:
-            generate_code(..., with_type: bool = False): Emits comma-separated arguments.
-            __iter__/__getitem__/__len__: Convenience wrappers enabling list-like iteration and indexing.
+    Methods:
+        generate_code(indent: str = "") -> Generator[CodeGenerationReport, None, None]:
+            Emit comma-separated parameters with type annotations.
+        __iter__/__getitem__/__len__: List-like interface for parameter access.
 
-        Notes:
-            This node exists to centralize comma insertion and label pluralization.
+    Notes:
+        This replaces Arguments for declaration contexts. Always emits type annotations.
     """
 
-    def __init__(self, arguments: list[Argument | Expression], line: int):
+    def __init__(self, parameters: list[Parameter], line: int):
+        super().__init__(line)
+        self.parameters = parameters
+        self.edges = self._as_edges(parameters)
+
+    def unindented_representation(self) -> str:
+        return f"Parameter" + ("s" if len(self.parameters) > 1 else "")
+
+    def generate_code(self, indent="") -> Generator[CodeGenerationReport, None, None]:
+        yield from emit_comma_separated_items(self.unique_id, self.parameters)
+
+    def __repr__(self):
+        return f"ParametersNode({self.parameters}, line {self.line})"
+
+    def __iter__(self):
+        return iter(self.parameters)
+
+    def __getitem__(self, index):
+        return self.parameters[index]
+
+    def __len__(self):
+        return len(self.parameters)
+
+
+class CallArguments(ASTNode):
+    """Argument list for function/procedure calls.
+
+    Used in: Function calls and CALL statements
+    Contains: list[Expression]
+
+    Attributes:
+        arguments (list[Expression]): Expressions passed as arguments.
+
+    Methods:
+        generate_code(indent: str = "") -> Generator[CodeGenerationReport, None, None]:
+            Emit comma-separated argument expressions (no type annotations).
+        __iter__/__getitem__/__len__: List-like interface for argument access.
+
+    Notes:
+        This replaces Arguments for call-site contexts. Never emits type annotations.
+    """
+
+    def __init__(self, arguments: list[Expression], line: int):
         super().__init__(line)
         self.arguments = arguments
         self.edges = self._as_edges(arguments)
@@ -1876,13 +1914,11 @@ class Arguments(ASTNode):
     def unindented_representation(self) -> str:
         return f"Argument" + ("s" if len(self.arguments) > 1 else "")
 
-    def generate_code(
-        self, indent="", with_type=False
-    ) -> Generator[CodeGenerationReport, None, None]:
-        yield from emit_comma_separated_items(self.unique_id, self.arguments, with_type=with_type)  # type: ignore
+    def generate_code(self, indent="") -> Generator[CodeGenerationReport, None, None]:
+        yield from emit_comma_separated_items(self.unique_id, self.arguments)
 
     def __repr__(self):
-        return f"ArgumentNode({self.arguments}, line {self.line})"
+        return f"CallArgumentsNode({self.arguments}, line {self.line})"
 
     def __iter__(self):
         return iter(self.arguments)
@@ -1903,7 +1939,7 @@ class FunctionDefinition(Statement):
 
         Attributes:
             name (str): Function/procedure name.
-            parameters (Arguments): Parameter list (typed).
+            parameters (Parameters): Parameter list (typed).
             return_type (ReturnType | None): Return type (None for procedures).
             body (Statements): Function/procedure body.
             procedure (bool): True when parsed from `PROCEDURE`.
@@ -1918,7 +1954,7 @@ class FunctionDefinition(Statement):
     def __init__(
         self,
         name: str,
-        parameters: list[Argument],
+        parameters: list[Parameter],
         return_type: ReturnType | None,
         body: Statements,
         line: int,
@@ -1926,7 +1962,7 @@ class FunctionDefinition(Statement):
     ):
         super().__init__(line)
         self.name = name
-        self.parameters = Arguments(parameters, line)  # type: ignore
+        self.parameters = Parameters(parameters, line)
         self.return_type = return_type if return_type else None
         self.body = body
         self.body.title = "Body"
@@ -1942,7 +1978,7 @@ class FunctionDefinition(Statement):
             self.unique_id,
             f"{indent}def {self.name}(",
         )
-        yield from self.parameters.generate_code(with_type=True)
+        yield from self.parameters.generate_code()
         yield from _yield_report(
             f"Generating code for function definition: {self.name} (type)...",
             self.unique_id,
@@ -1976,7 +2012,7 @@ class FunctionCall(Expression):
 
         Attributes:
             name (str): Callee identifier.
-            arguments (Arguments): Argument expressions.
+            arguments (CallArguments): Argument expressions.
             is_procedure (bool): True when this call originated from a `CALL` statement.
 
         Methods:
@@ -1990,7 +2026,7 @@ class FunctionCall(Expression):
     def __init__(
         self,
         name: str,
-        arguments: Arguments,
+        arguments: CallArguments,
         line: int,
         is_procedure_call: bool = False,
     ):
